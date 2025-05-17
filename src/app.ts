@@ -1,6 +1,7 @@
 import express, { Express, Request, Response } from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose'; 
+import passportConfig from './config/passport';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -12,6 +13,7 @@ const mongoUri = process.env.MONGODB_URI;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(passportConfig.initialize());
 
 // Connect to MongoDB
 const connectDB = async () => {
