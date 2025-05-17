@@ -78,18 +78,5 @@ passport.use(
   })
 );
 
-// Optional: If using sessions with Passport (not typical for stateless JWT APIs, but good to know)
-// passport.serializeUser((user: any, done) => {
-//   done(null, user.id);
-// });
-
-// passport.deserializeUser(async (id, done) => {
-//   try {
-//     const user = await User.findById(id);
-//     done(null, user);
-//   } catch (error) {
-//     done(error);
-//   }
-// });
 
 export default passport;
