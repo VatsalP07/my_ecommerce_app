@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 export interface IUser extends Document {
   name: string;
   email: string;
-  password?: string; 
+  password?: string;  
   roles: string[];
   createdAt: Date;
   updatedAt: Date;
