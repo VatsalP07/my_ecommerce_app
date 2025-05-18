@@ -2,8 +2,8 @@
 import express, { Router, Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import jwt from 'jsonwebtoken';
-// Make sure the casing matches your file system: User.ts likely means 'User'
-import User, { IUser } from '../models/user'; // Corrected casing assuming User.ts
+import { authorize } from '../middleware/authorize';
+import User, { IUser } from '../models/user'; // Corrected casing to match actual file
 
 const router: Router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_dev_only';
@@ -124,4 +124,40 @@ router.get(
     }
 );
 
+router.get(
+    '/admin-dashboard',
+    passport.authenticate('jwt', { session: false }), // First, authenticate
+    authorize(['admin']),                            // Then, authorize for 'admin' role
+    (req: Request, res: Response) => {
+        res.json({
+            message: 'Welcome to the Admin Dashboard!',
+            user: req.user,
+        });
+    }
+);
+
+router.get(
+    '/seller-panel',
+    passport.authenticate('jwt', { session: false }),
+    authorize(['seller']),
+    (req: Request, res: Response) => {
+        res.json({
+            message: 'Welcome to the Seller Panel!',
+            user: req.user,
+        });
+    }
+);
+
+
+router.get(
+    '/product-management-area',
+    passport.authenticate('jwt', { session: false }),
+    authorize(['admin', 'seller']), 
+    (req: Request, res: Response) => {
+        res.json({
+            message: 'Welcome to the Product Management Area (for Admins or Sellers)!',
+            user: req.user,
+        });
+    }
+);
 export default router;

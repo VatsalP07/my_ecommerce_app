@@ -1,14 +1,31 @@
 {
   "compilerOptions": {
-    "target": "es2016", // Or ES2020
-    "module": "commonjs",
-    "outDir": "./dist",  // Compiled JS will go here
-    // "rootDir": ".", // If app.ts is in root, rootDir can be . or commented out
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true
+    "target": "ES2020",                 // Target modern Node.js versions
+    "module": "commonjs",               // Standard module system for Node.js
+    "outDir": "./dist",                 // Output directory for compiled JavaScript
+    "rootDir": "./src",                 // Root directory of your TypeScript source files
+    "esModuleInterop": true,            // Enables compatibility with CommonJS modules using ES6 import syntax
+    "forceConsistentCasingInFileNames": true, // Enforces consistent casing in file names
+    "strict": true,                     // Enables all strict type-checking options (recommended)
+    "skipLibCheck": true,               // Skips type checking of declaration files (speeds up compilation)
+    "resolveJsonModule": true,          // Allows importing JSON files as modules (can be useful)
+    "sourceMap": true,                  // Generates source maps for easier debugging (optional for dev)
+    "baseUrl": "./",                    // Base directory for module resolution (used with paths)
+    "paths": {                          // Optional: For defining path aliases (e.g., @/models/*)
+      "@/*": ["src/*"]                   // Example: allows import '@/models/User' instead of '../../models/User'
+    },
+    "typeRoots": [                      // Specifies where to look for type declaration files
+      "./node_modules/@types",
+      "./src/types"                    // Ensures your custom express types are found
+    ]
   },
-  "include": ["app.ts"], // ONLY include app.ts for this test
-  "exclude": ["node_modules", "dist", "src"] // Exclude src if it exists
+  "include": [
+    "src/**/*.ts"                       // Include all .ts files within the src directory
+  ],
+  "exclude": [
+    "node_modules",                     // Exclude the node_modules directory
+    "dist",                             // Exclude the compiled output directory
+    "**/*.spec.ts",                     // Exclude test files if you have them
+    "**/*.test.ts"                      // Exclude test files if you have them
+  ]
 }
