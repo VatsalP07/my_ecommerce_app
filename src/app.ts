@@ -2,6 +2,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
+import productRoutes from './routes/productRoutes';
 import passport from './config/passport'; // Your Passport configuration
 import authRoutes from './routes/authRoutes';
 // Import other routes as you create them:
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bo
 
 // --- Passport Authentication Middleware ---
 app.use(passport.initialize());
+app.use('/api/v1/products', productRoutes);
 
 // --- MongoDB Connection ---
 const connectDB = async () => {
