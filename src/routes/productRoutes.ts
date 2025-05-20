@@ -8,10 +8,15 @@ import {
     getSellerProducts,
     getProductById,
     updateProduct,
-    deleteProduct
+    deleteProduct,
+    getAllProducts,
 } from '../controllers/productController';
 
 const router = express.Router();
+
+
+// --- GET /api/v1/products (List all products - Public, with Pagination) ---
+router.get('/', getAllProducts); // Mounted at the root of /api/v1/products
 
 // --- POST /api/v1/products (Create a new product - Seller) ---
 // Using upload.array('productImages', 5) to accept up to 5 images under the field name 'productImages'
