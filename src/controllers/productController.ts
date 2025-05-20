@@ -93,6 +93,7 @@ export const getSellerProducts = async (req: AuthenticatedRequest, res: Response
 export const getProductById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const product = await Product.findById(req.params.id).populate('sellerId', 'name email');
+        
         if (!product) {
             res.status(404).json({ message: 'Product not found' });
             return;
@@ -186,6 +187,41 @@ export const deleteProduct = async (req: AuthenticatedRequest, res: Response, ne
             res.status(400).json({ message: 'Invalid product ID format' });
             return;
         }
+        next(error);
+    }
+};
+
+
+// --- GET /api/v1/products (List all products with pagination - Public) ---
+export const getAllProducts = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10; // Default limit to 10 items per page
+        const skip = (page - 1) * limit;
+
+        // Optional: Add filtering criteria here later (e.g., by category, inStock: true)
+        const queryConditions = {}; // e.g., { stock: { $gt: 0 } } for in-stock items
+
+        const products = await Product.find(queryConditions)
+            .populate('sellerId', 'name') // Populate seller's name
+            .sort({ createdAt: -1 })     // Sort by newest first
+            .skip(skip)
+            .limit(limit);
+
+        const totalProducts = await Product.countDocuments(queryConditions);
+        const totalPages = Math.ceil(totalProducts / limit);
+
+        res.json({
+            message: 'Products fetched successfully',
+            data: products,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                pageSize: limit,
+            },
+        });
+    } catch (error) {
         next(error);
     }
 };
