@@ -1,5 +1,6 @@
 // src/routes/productRoutes.ts
 import express from 'express';
+import { RequestHandler } from 'express';
 import passport from 'passport';
 import { authorize } from '../middleware/authorize';
 import { upload } from '../middleware/upload'; // Your multer config
@@ -10,6 +11,7 @@ import {
     updateProduct,
     deleteProduct,
     getAllProducts,
+    searchProducts,
 } from '../controllers/productController';
 
 const router = express.Router();
@@ -18,6 +20,7 @@ const router = express.Router();
 // --- GET /api/v1/products (List all products - Public, with Pagination) ---
 router.get('/', getAllProducts); // Mounted at the root of /api/v1/products
 
+router.get('/search', searchProducts);
 // --- POST /api/v1/products (Create a new product - Seller) ---
 // Using upload.array('productImages', 5) to accept up to 5 images under the field name 'productImages'
 router.post(
@@ -35,6 +38,7 @@ router.get(
     authorize(['seller', 'admin']), // Only sellers or admins can see their product list this way
     getSellerProducts
 );
+
 
 // --- GET /api/v1/products/:id (Get a single product - Public) ---
 // No auth needed for public viewing of a product

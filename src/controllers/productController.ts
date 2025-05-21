@@ -1,5 +1,5 @@
 // src/controllers/productController.ts
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction,RequestHandler } from 'express';
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ObjectCannedACL } from '@aws-sdk/client-s3';
 // import { getSignedUrl } from "@aws-sdk/s3-request-presigner"; // Not used in current code, can remove if not planned
 import { v4 as uuidv4 } from 'uuid';
@@ -36,7 +36,7 @@ const uploadFileToS3 = async (file: Express.Multer.File): Promise<string> => {
     // return fileKey;
 };
 
-export const createProduct = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const createProduct: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { name, description, price, category, stock } = req.body;
         const sellerId = req.user?._id;
@@ -75,7 +75,7 @@ export const createProduct = async (req: AuthenticatedRequest, res: Response, ne
     }
 };
 
-export const getSellerProducts = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const getSellerProducts: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const sellerId = req.user?._id;
         if (!sellerId) {
@@ -90,7 +90,7 @@ export const getSellerProducts = async (req: AuthenticatedRequest, res: Response
     }
 };
 
-export const getProductById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const getProductById: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const product = await Product.findById(req.params.id).populate('sellerId', 'name email');
         
@@ -108,7 +108,7 @@ export const getProductById = async (req: Request, res: Response, next: NextFunc
     }
 };
 
-export const updateProduct = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const updateProduct:RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const productId = req.params.id;
         const sellerId = req.user?._id;
@@ -145,7 +145,7 @@ export const updateProduct = async (req: AuthenticatedRequest, res: Response, ne
     }
 };
 
-export const deleteProduct = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const deleteProduct : RequestHandler= async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const productId = req.params.id;
         const sellerId = req.user?._id;
@@ -193,7 +193,7 @@ export const deleteProduct = async (req: AuthenticatedRequest, res: Response, ne
 
 
 // --- GET /api/v1/products (List all products with pagination - Public) ---
-export const getAllProducts = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllProducts : RequestHandler= async (req: Request, res: Response, next: NextFunction) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10; // Default limit to 10 items per page
@@ -225,3 +225,105 @@ export const getAllProducts = async (req: Request, res: Response, next: NextFunc
         next(error);
     }
 };
+
+// --- GET /api/v1/products/search (Search products with pagination) ---
+export const searchProducts: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const query = req.query.q as string; // The search term
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+        const skip = (page - 1) * limit;
+
+        if (!query) {
+            res.status(400).json({ message: 'Search query (q) is required.' });
+            return
+        }
+
+        // Construct the aggregation pipeline
+        const aggregationPipeline = [
+            {
+                $search: {
+                    index: 'product_search_index', // The name of your Atlas Search index
+                    text: {
+                        query: query,
+                        path: ['name', 'description', 'category'], // Fields to search in
+                        fuzzy: { // Optional: allow for some misspellings
+                            maxEdits: 1, // Max 1 character difference
+                            prefixLength: 2 // Don't apply fuzzy search to first 2 chars
+                        }
+                    },
+                    // Optional: Highlighting (adds a 'highlights' field to documents)
+                    // highlight: {
+                    //     path: ['name', 'description']
+                    // }
+                },
+            },
+            // Optional: Add a $project stage if you want to shape the output or add score
+            // {
+            //     $project: {
+            //         _id: 1, name: 1, description: 1, price: 1, category: 1,
+            //         stock: 1, sellerId: 1, imageKeys: 1, createdAt: 1, updatedAt: 1,
+            //         score: { $meta: "searchScore" } // Adds the relevance score
+            //     }
+            // },
+            // {
+            //     $sort: { score: { $meta: "searchScore" } } // Sort by relevance score
+            // },
+            {
+                $lookup: { // Populate sellerId after search
+                    from: 'users', // The name of the users collection
+                    localField: 'sellerId',
+                    foreignField: '_id',
+                    as: 'sellerInfo'
+                }
+            },
+            {
+                $unwind: { // Unwind the sellerInfo array (should only be one seller)
+                    path: '$sellerInfo',
+                    preserveNullAndEmptyArrays: true // Keep product if seller not found (edge case)
+                }
+            },
+            {
+                $project: { // Define final output shape, select seller fields
+                    _id: 1, name: 1, description: 1, price: 1, category: 1,
+                    stock: 1, imageKeys: 1, createdAt: 1, updatedAt: 1,
+                    numReviews: 1, averageRating: 1, // Keep existing fields
+                    sellerId: { // Re-shape sellerId to include only name
+                        _id: '$sellerInfo._id',
+                        name: '$sellerInfo.name',
+                    },
+                    // score: { $meta: "searchScore" } // If you projected score earlier
+                    // highlights: 1 // If you enabled highlighting
+                }
+            },
+            {
+                $facet: { // For pagination with aggregation
+                    paginatedResults: [{ $skip: skip }, { $limit: limit }],
+                    totalCount: [{ $count: 'count' }],
+                },
+            },
+        ];
+
+        const results = await Product.aggregate(aggregationPipeline);
+
+        const products = results[0].paginatedResults;
+        const totalProducts = results[0].totalCount[0] ? results[0].totalCount[0].count : 0;
+        const totalPages = Math.ceil(totalProducts / limit);
+
+        res.json({
+            message: 'Search results fetched successfully',
+            data: products,
+            pagination: {
+                currentPage: page,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                pageSize: limit,
+            },
+            // query: query // Optionally return the query term
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
