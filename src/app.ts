@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import productRoutes from './routes/productRoutes';
 import passport from './config/passport'; // Your Passport configuration
 import authRoutes from './routes/authRoutes';
+import cartRoutes from './routes/cartRoutes';
 // Import other routes as you create them:
 // import productRoutes from './routes/productRoutes';
 
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bo
 // --- Passport Authentication Middleware ---
 app.use(passport.initialize());
 app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/cart', cartRoutes);
 
 
 // --- MongoDB Connection ---
