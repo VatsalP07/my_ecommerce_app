@@ -1,0 +1,85 @@
+// frontend/ts/auth.ts
+import { API_BASE_URL, setToken, updateNav } from './main.js'; // .js extension needed for browser ES modules
+
+const loginForm = document.getElementById('login-form') as HTMLFormElement | null;
+const registerForm = document.getElementById('register-form') as HTMLFormElement | null;
+const loginErrorEl = document.getElementById('login-error');
+const registerErrorEl = document.getElementById('register-error');
+
+// frontend/ts/auth.ts
+if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        console.log('[auth.ts - login] Login form submitted.');
+        if (loginErrorEl) loginErrorEl.textContent = '';
+
+        const email = (document.getElementById('email') as HTMLInputElement).value;
+        const password = (document.getElementById('password') as HTMLInputElement).value;
+        console.log('[auth.ts - login] Attempting login with Email:', email);
+
+        try {
+            console.log('[auth.ts - login] Fetching POST /api/v1/auth/login...');
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            console.log('[auth.ts - login] API response status:', response.status);
+            console.log('[auth.ts - login] API response ok?:', response.ok);
+
+            const data = await response.json(); // Try to parse JSON regardless of response.ok for debugging
+            console.log('[auth.ts - login] API response data (parsed JSON):', JSON.stringify(data));
+
+            if (!response.ok) {
+                console.error('[auth.ts - login] API call not OK. Error data:', data);
+                throw new Error(data.message || `Login failed with status ${response.status}`);
+            }
+
+            console.log('[auth.ts - login] Checking for data.token in response...');
+            if (data && data.token && typeof data.token === 'string' && data.token.trim() !== '') {
+                console.log('[auth.ts - login] Token found in response:', data.token);
+                setToken(data.token); // This will trigger console logs from setToken
+                alert('Login successful!');
+                console.log('[auth.ts - login] Redirecting to /index.html...');
+                window.location.href = '/index.html'; // Or just '/'
+            } else {
+                 console.error('[auth.ts - login] Token NOT found or is invalid in response. Data was:', data);
+                 throw new Error('Token not received from server or is invalid.');
+            }
+        } catch (error: any) {
+            if (loginErrorEl) loginErrorEl.textContent = error.message;
+            console.error('[auth.ts - login] Login catch block error:', error.message, error);
+        }
+    });
+}
+
+if (registerForm) {
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (registerErrorEl) registerErrorEl.textContent = '';
+
+        const name = (document.getElementById('name') as HTMLInputElement).value;
+        const email = (document.getElementById('email') as HTMLInputElement).value;
+        const password = (document.getElementById('password') as HTMLInputElement).value;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || (data.errors ? data.errors.join(', ') : 'Registration failed'));
+            }
+
+            alert('Registration successful! Please login.');
+            window.location.href = '/login.html'; // Redirect to login page
+        } catch (error: any) {
+            if (registerErrorEl) registerErrorEl.textContent = error.message;
+            console.error('Registration error:', error);
+        }
+    });
+}

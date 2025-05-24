@@ -1,12 +1,14 @@
 // src/app.ts
 import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
+import path from 'path'; 
 import mongoose from 'mongoose';
 import productRoutes from './routes/productRoutes';
 import passport from './config/passport'; // Your Passport configuration
 import authRoutes from './routes/authRoutes';
 import cartRoutes from './routes/cartRoutes';
 import orderRoutes from './routes/orderRoutes';
+
 // Import other routes as you create them:
 // import productRoutes from './routes/productRoutes';
 
@@ -22,9 +24,8 @@ app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bo
 
 // --- Passport Authentication Middleware ---
 app.use(passport.initialize());
-app.use('/api/v1/products', productRoutes);
-app.use('/api/v1/cart', cartRoutes);
-app.use('/api/v1/orders', orderRoutes);
+
+  app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
 
 // --- MongoDB Connection ---
@@ -49,6 +50,10 @@ app.get('/api/v1', (req: Request, res: Response) => {
 });
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/cart', cartRoutes);
+app.use('/api/v1/orders', orderRoutes);
+
 // Mount other application routes here:
 // app.use('/api/v1/products', productRoutes);
 

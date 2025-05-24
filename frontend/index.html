@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-commerce Store</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav>
+        <div><a href="/">Home</a></div>
+        <div id="auth-links">
+            <!-- Auth links will be populated by JS -->
+        </div>
+        <div><a href="/cart.html">Cart (<span id="cart-count">0</span>)</a></div>
+    </nav>
+
+    <div class="container">
+        <h1>Our Products</h1>
+        <div id="product-list" class="product-list">
+            <!-- Products will be loaded here by JS -->
+            <p>Loading products...</p>
+        </div>
+        <div id="pagination-controls">
+            <!-- Pagination buttons will be here -->
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+    <script type="module" src="js/productList.js"></script>
+</body>
+</html>
