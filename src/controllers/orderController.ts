@@ -2,10 +2,10 @@
 import { Request, Response, NextFunction } from 'express';
 import Order, { IOrder, IOrderItem } from '../models/Order';
 import Product, { IProduct } from '../models/Product';
-import Cart from '../models/Cart'; // Removed { ICart } as it's not directly used here, Cart model is enough
-import { IUser } from '../models/user';
+import Cart from '../models/Cart';
+import { IUser } from '../models/user'; // Corrected import path assuming User.ts
 import mongoose from 'mongoose';
-
+import { io } from '../app'; // Import the exported io instance
 
 interface AuthenticatedRequest extends Request {
   user?: IUser;
@@ -25,12 +25,12 @@ export const createOrder = async (
         }
 
         const {
-            orderItems,
+            orderItems: clientOrderItems, // Renamed to avoid conflict with detailedOrderItems
             shippingAddress,
             paymentMethod,
         } = req.body;
 
-        if (!orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
+        if (!clientOrderItems || !Array.isArray(clientOrderItems) || clientOrderItems.length === 0) {
             res.status(400).json({ message: 'No order items provided or invalid format.' });
             return;
         }
@@ -45,49 +45,47 @@ export const createOrder = async (
 
         const detailedOrderItems: IOrderItem[] = [];
         let calculatedItemsPrice = 0;
+        const productsToUpdateStock: { product: IProduct, quantityChange: number }[] = [];
 
+        // Optional: Start a MongoDB transaction for atomicity
         // const session = await mongoose.startSession();
         // session.startTransaction();
 
         try {
-            for (const item of orderItems) {
-                // Basic validation for item structure
+            for (const item of clientOrderItems) {
                 if (!item.productId || typeof item.quantity !== 'number' || item.quantity < 1) {
-                    // await session.abortTransaction();
-                    // session.endSession();
+                    // await session.abortTransaction(); session.endSession();
                     res.status(400).json({ message: `Invalid item data for productId: ${item.productId}` });
                     return;
                 }
 
-                const product: IProduct | null = await Product.findById(item.productId);
+                const product: IProduct | null = await Product.findById(item.productId); // .session(session) if using transactions
                 if (!product) {
-                    // await session.abortTransaction();
-                    // session.endSession();
+                    // await session.abortTransaction(); session.endSession();
                     res.status(404).json({ message: `Product with ID ${item.productId} not found.` });
                     return;
                 }
                 if (product.stock < item.quantity) {
-                    // await session.abortTransaction();
-                    // session.endSession();
+                    // await session.abortTransaction(); session.endSession();
                     res.status(400).json({ message: `Not enough stock for ${product.name}. Available: ${product.stock}` });
                     return;
                 }
 
-                product.stock -= item.quantity;
-                await product.save(); // { session }
+                // Don't save product stock yet, do it after order is saved or in a transaction
+                productsToUpdateStock.push({ product, quantityChange: -item.quantity });
 
                 detailedOrderItems.push({
                     product: product._id,
                     name: product.name,
                     quantity: item.quantity,
-                    price: product.price,
+                    price: product.price, // Price at time of order
                     image: product.imageKeys && product.imageKeys.length > 0 ? product.imageKeys[0] : undefined,
                 });
                 calculatedItemsPrice += product.price * item.quantity;
             }
 
-            const taxPrice = Number((0.1 * calculatedItemsPrice).toFixed(2));
-            const shippingPrice = calculatedItemsPrice > 100 ? 0 : 10;
+            const taxPrice = Number((0.1 * calculatedItemsPrice).toFixed(2)); // Example tax
+            const shippingPrice = calculatedItemsPrice > 100 ? 0 : 10; // Example shipping
             const totalPrice = Number((calculatedItemsPrice + taxPrice + shippingPrice).toFixed(2));
 
             const order = new Order({
@@ -99,27 +97,62 @@ export const createOrder = async (
                 taxPrice,
                 shippingPrice,
                 totalPrice,
-                orderStatus: 'Pending',
-                isPaid: false,
+                orderStatus: 'Pending', // Initial status
+                isPaid: false, // Assuming payment is processed separately or simulated
             });
 
             const createdOrder = await order.save(); // { session }
+
+            // --- Update product stock and emit Socket.IO events for each stock change ---
+            for (const { product, quantityChange } of productsToUpdateStock) {
+                product.stock += quantityChange; // product.stock -= item.quantity
+                if (product.stock < 0) product.stock = 0; // Ensure stock doesn't go negative
+                await product.save(); // { session }
+
+                // Emit stock update event via Socket.IO
+                io.emit('stockUpdate', {
+                    productId: product._id.toString(),
+                    newStock: product.stock,
+                });
+                console.log(`[Socket.IO]: Emitted stockUpdate for ${product._id}, new stock: ${product.stock}`);
+            }
+
+            // Clear the user's cart after successful order creation
             await Cart.findOneAndUpdate({ user: userId }, { $set: { items: [] } }); // { session }
+
+            
+            // --- Emit Socket.IO event for the new order ---
+           if (createdOrder && createdOrder._id) {
+            // --- Emit Socket.IO event for the new order ---
+                io.emit('newOrderCreated', {
+                orderId: createdOrder._id.toString(), // Now TypeScript knows _id exists
+                userName: req.user?.name || 'Someone',
+                productName: createdOrder.orderItems[0]?.name,
+                message: `${req.user?.name || 'A customer'} just placed an order!`
+            });
+            console.log(`[Socket.IO]: Emitted newOrderCreated for order ${createdOrder._id.toString()}`);
+            } else {
+            console.error("Order was saved but _id is missing, which should not happen.");
+            // Handle this unlikely scenario, perhaps don't emit the event or log a critical error
+            }
 
             // await session.commitTransaction();
             // session.endSession();
 
             res.status(201).json(createdOrder);
 
-        } catch (error) { // Inner try-catch for transaction/processing logic
-            // await session.abortTransaction();
+        } catch (error) { // Inner try-catch for processing logic
+            // if (session.inTransaction()) {
+            //     await session.abortTransaction();
+            // }
             // session.endSession();
-            console.error("Error during order creation process:", error);
-            next(error); // Pass to global error handler
+            console.error("Error during order creation processing:", error);
+            // Ensure the error is passed to the global error handler to avoid hanging requests
+            return next(error); // Changed from next(error) to return next(error) to ensure no further code exec.
         }
 
-    } catch (error) { // Outer try-catch for initial setup or unexpected issues
-        next(error); // Pass to global error handler
+    } catch (error) { // Outer try-catch
+        next(error);
     }
 };
 
@@ -180,14 +213,13 @@ export const getOrderById = async (
 
 // GET /api/v1/admin/orders - Admin gets all orders
 export const getAllOrdersAdmin = async (
-    req: AuthenticatedRequest, // Still AuthenticatedRequest as admin is also a user
+    req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
 ): Promise<void> => {
     try {
-        // Role check is handled by 'authorize' middleware, no need to check req.user.roles here
         const orders = await Order.find({})
-                                .populate('user', 'name email')
+                                .populate('user', 'name email') // Populate user details
                                 .sort({ createdAt: -1 });
         res.json(orders);
     } catch (error) {
@@ -197,7 +229,7 @@ export const getAllOrdersAdmin = async (
 
 // PUT /api/v1/admin/orders/:id/status - Admin updates order status
 export const updateOrderStatusAdmin = async (
-    req: AuthenticatedRequest, // Still AuthenticatedRequest
+    req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
 ): Promise<void> => {
@@ -209,8 +241,9 @@ export const updateOrderStatusAdmin = async (
             res.status(400).json({ message: 'Invalid order ID format.' });
             return;
         }
-        if (!orderStatus || !['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'].includes(orderStatus)) {
-            res.status(400).json({ message: 'Invalid order status provided.' });
+        const validStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
+        if (!orderStatus || !validStatuses.includes(orderStatus)) {
+            res.status(400).json({ message: `Invalid order status. Must be one of: ${validStatuses.join(', ')}` });
             return;
         }
 
@@ -220,15 +253,22 @@ export const updateOrderStatusAdmin = async (
             return;
         }
 
+        const previousStatus = order.orderStatus;
         order.orderStatus = orderStatus as IOrder['orderStatus'];
+
         if (orderStatus === 'Delivered') {
             order.isDelivered = true;
             order.deliveredAt = new Date();
-        } else if (orderStatus !== 'Delivered' && order.isDelivered) { // Reset if changed from Delivered
+        } else if (previousStatus === 'Delivered' && orderStatus !== 'Delivered') {
+            // If moving away from Delivered status, reset delivery fields
             order.isDelivered = false;
             order.deliveredAt = undefined;
         }
-        // Similarly, you might update isPaid/paidAt if 'Paid' was a status or from payment gateway
+
+        // Future: Emit order status update event via Socket.IO
+        // io.emit('orderStatusUpdate', { orderId: order._id, newStatus: order.orderStatus, userId: order.user });
+        // console.log(`[Socket.IO]: Emitted orderStatusUpdate for order ${order._id} to status ${order.orderStatus}`);
+
 
         const updatedOrder = await order.save();
         res.json(updatedOrder);
