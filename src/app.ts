@@ -1,71 +1,123 @@
 // src/app.ts
 import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import path from 'path'; 
+import path from 'path';
 import mongoose from 'mongoose';
-import productRoutes from './routes/productRoutes';
-import passport from './config/passport'; // Your Passport configuration
+import http from 'http'; // Import Node.js http module
+import { Server as SocketIOServer, Socket } from 'socket.io'; // Import Socket.IO Server
+
+// Configs
+import passportConfig from './config/passport'; // Your Passport configuration
+
+// Routes
 import authRoutes from './routes/authRoutes';
+import productRoutes from './routes/productRoutes';
 import cartRoutes from './routes/cartRoutes';
 import orderRoutes from './routes/orderRoutes';
-
-// Import other routes as you create them:
-// import productRoutes from './routes/productRoutes';
 
 dotenv.config(); // Load environment variables
 
 const app: Express = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5001; // Default to 5001 for consistency
 const mongoUri = process.env.MONGODB_URI;
+
+// --- Create HTTP server and integrate Socket.IO ---
+const httpServer = http.createServer(app);
+const io = new SocketIOServer(httpServer, {
+    cors: {
+        origin: `http://localhost:${port}`, // Allow connections from where frontend is served
+        methods: ["GET", "POST"],
+    }
+});
 
 // --- Core Middleware ---
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies
 
 // --- Passport Authentication Middleware ---
-app.use(passport.initialize());
-
-  app.use(express.static(path.join(__dirname, '..', 'frontend')));
-
+app.use(passportConfig.initialize()); // Use the imported passport directly
 
 // --- MongoDB Connection ---
 const connectDB = async () => {
   if (!mongoUri) {
     console.error('FATAL ERROR: MONGODB_URI is not defined in .env file');
-    process.exit(1); // Exit if DB URI is missing
+    process.exit(1);
   }
   try {
     await mongoose.connect(mongoUri);
     console.log('MongoDB Connected...');
   } catch (err: any) {
     console.error('MongoDB connection error:', err.message);
-    process.exit(1); // Exit on connection failure
+    process.exit(1);
   }
 };
 connectDB();
 
-// --- API Routes ---
-app.get('/api/v1', (req: Request, res: Response) => {
-  res.send('E-commerce API is running!');
+// --- Socket.IO Connection Logic ---
+io.on('connection', (socket: Socket) => {
+    console.log(`[Socket.IO]: New client connected: ${socket.id}`);
+
+    // Example: Listen for a custom event from client
+    socket.on('clientMessage', (data) => {
+        console.log(`[Socket.IO]: Message from client ${socket.id}:`, data);
+        io.emit('serverMessage', `Server received: ${data.message} from ${socket.id}`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`[Socket.IO]: Client disconnected: ${socket.id}`);
+    });
 });
 
+// --- Serve Frontend Static Files ---
+// This assumes your 'frontend' directory is at the project root,
+// and this 'app.ts' (when compiled to 'dist/app.js') is one level down in 'dist'.
+const frontendPath = path.join(__dirname, '..', 'frontend');
+
+// Serve specific asset folders first
+app.use('/js', express.static(path.join(frontendPath, 'js')));
+app.use('/css', express.static(path.join(frontendPath, 'css')));
+// Potentially other asset folders like /images if you have them in frontend
+
+// --- API Routes ---
+// These should come AFTER specific static asset serving but BEFORE general static file serving for HTML
+app.get('/api/v1', (req: Request, res: Response) => {
+  res.send('E-commerce API is running with Socket.IO!');
+});
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
 
-// Mount other application routes here:
-// app.use('/api/v1/products', productRoutes);
+// --- Serve HTML files and handle client-side routing ---
+// This serves index.html for the root and any other non-API, non-asset path.
+// It relies on your frontend (or simple HTML links) to handle different pages.
+app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    // If the request is for an API route that wasn't matched above,
+    // it shouldn't be served index.html. Let it fall through to the 404 handler.
+    if (req.path.startsWith('/api/')) {
+        return next(); // Pass to the 404 handler for API routes
+    }
+    // For any other GET request, serve an HTML file if it exists, otherwise index.html
+    const requestedHtmlFile = path.join(frontendPath, req.path.endsWith('.html') ? req.path : `${req.path}.html`);
+    const defaultHtmlFile = path.join(frontendPath, 'index.html');
 
-// --- 404 Not Found Handler ---
-// This should be after all your valid routes
+    // Try to serve specific HTML file, otherwise serve index.html
+    // This is a simplified way; a real SPA would handle this differently on the client.
+    res.sendFile(requestedHtmlFile, (err) => {
+        if (err) {
+            res.sendFile(defaultHtmlFile);
+        }
+    });
+});
+
+
+// --- 404 Not Found Handler (for API routes that fell through) ---
 app.use((req: Request, res: Response, next: NextFunction) => {
-  res.status(404).json({ message: `Resource not found at ${req.originalUrl}` });
+  // This will only be reached if no API route matched and it wasn't a file served by express.static or the catch-all GET
+  res.status(404).json({ message: `API Endpoint not found at ${req.originalUrl}` });
 });
 
 // --- Global Error Handler ---
-// Must be defined AFTER all other app.use() and routes.
-// Must have 4 arguments to be recognized by Express as an error-handling middleware.
 app.use((err: any, req: Request, res: Response, next: NextFunction): void => {
   console.error("--- Global Error Handler ---");
   console.error("Error Message:", err.message);
@@ -78,7 +130,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction): void => {
     message: err.message || 'An unexpected internal server error occurred.',
   };
 
-  // Mongoose Validation Error
   if (err.name === 'ValidationError') {
     statusCode = 400;
     responseBody.message = "Validation Failed";
@@ -86,57 +137,38 @@ app.use((err: any, req: Request, res: Response, next: NextFunction): void => {
       field: el.path,
       message: el.message,
     }));
-    res.status(statusCode).json(responseBody);
-    return;
-  }
-
-  // Mongoose Duplicate Key Error (e.g., unique email constraint)
-  if (err.code && err.code === 11000) {
+  } else if (err.code && err.code === 11000) {
     statusCode = 409; // Conflict
     const field = Object.keys(err.keyValue)[0];
     responseBody.message = `An account with that ${field} already exists.`;
     responseBody.field = field;
-    res.status(statusCode).json(responseBody);
-    return;
-  }
-
-  // Mongoose CastError (e.g., invalid ObjectId format for :id params)
-  if (err.name === 'CastError' && err.kind === 'ObjectId') {
+  } else if (err.name === 'CastError' && err.kind === 'ObjectId') {
     statusCode = 400;
     responseBody.message = `Invalid ID format for resource: ${err.value}`;
     responseBody.path = err.path;
     responseBody.value = err.value;
-    res.status(statusCode).json(responseBody);
-    return;
-  }
-
-  // JWT Authentication Errors
-  if (err.name === 'JsonWebTokenError') {
-    statusCode = 401; // Unauthorized
+  } else if (err.name === 'JsonWebTokenError') {
+    statusCode = 401;
     responseBody.message = 'Invalid token. Please log in again.';
-    res.status(statusCode).json(responseBody);
-    return;
-  }
-  if (err.name === 'TokenExpiredError') {
-    statusCode = 401; // Unauthorized
+  } else if (err.name === 'TokenExpiredError') {
+    statusCode = 401;
     responseBody.message = 'Your session has expired. Please log in again.';
-    res.status(statusCode).json(responseBody);
-    return;
+  } else if (err.status || err.statusCode) {
+    // statusCode is already set
+  } else {
+    // For unhandled errors not fitting above categories
+    statusCode = 500;
   }
 
-  // If a custom error has a status code (e.g., from a service layer)
-  if (err.status || err.statusCode) {
-    // statusCode is already set from err.status or err.statusCode
-    // responseBody.message is already set from err.message
-    res.status(statusCode).json(responseBody);
-    return;
-  }
-
-  // Default to 500 Internal Server Error for unhandled errors
   res.status(statusCode).json(responseBody);
 });
 
 // --- Start the Server ---
-app.listen(port, () => {
-  console.log(`[Server]: Server is running at http://localhost:${port}`);
+// Use httpServer.listen for Socket.IO integration
+httpServer.listen(port, () => {
+  console.log(`[Server]: HTTP Server with Socket.IO is running at http://localhost:${port}`);
+  console.log(`Frontend should be accessible at http://localhost:${port}`);
 });
+
+// Export io instance for use in other modules (e.g., controllers)
+export { io };

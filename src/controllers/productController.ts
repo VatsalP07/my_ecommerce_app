@@ -1,11 +1,11 @@
 // src/controllers/productController.ts
-import { Request, Response, NextFunction,RequestHandler } from 'express';
-import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ObjectCannedACL } from '@aws-sdk/client-s3';
-// import { getSignedUrl } from "@aws-sdk/s3-request-presigner"; // Not used in current code, can remove if not planned
+import { Request, Response, NextFunction, RequestHandler } from 'express';
+import { PutObjectCommand, DeleteObjectCommand, ObjectCannedACL } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import Product, { IProduct } from '../models/Product';
-import { IUser } from '../models/user';
+import { IUser } from '../models/user'; // Corrected import path assuming User.ts is in models
 import { s3Client } from '../config/s3Client';
+import { io } from '../app'; // Import the shared Socket.IO instance
 
 interface AuthenticatedRequest extends Request {
     user?: IUser;
@@ -19,21 +19,18 @@ const uploadFileToS3 = async (file: Express.Multer.File): Promise<string> => {
     if (!S3_BUCKET_NAME) {
         throw new Error('S3_BUCKET_NAME is not defined in .env');
     }
-    const fileKey = `products/${uuidv4()}-${file.originalname.replace(/\s+/g, '-')}`; // Sanitize filename
+    const fileKey = `products/${uuidv4()}-${file.originalname.replace(/\s+/g, '-')}`;
 
     const params = {
         Bucket: S3_BUCKET_NAME,
         Key: fileKey,
         Body: file.buffer,
         ContentType: file.mimetype,
-        ACL: ObjectCannedACL.public_read, // Uncomment if your bucket allows public ACLs and you want direct public URLs
+        ACL: ObjectCannedACL.public_read,
     };
 
     await s3Client.send(new PutObjectCommand(params));
-    // If using public-read ACL:
     return `https://${S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileKey}`;
-    // If bucket is private, return just fileKey and generate pre-signed URLs elsewhere
-    // return fileKey;
 };
 
 export const createProduct: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -42,20 +39,18 @@ export const createProduct: RequestHandler = async (req: AuthenticatedRequest, r
         const sellerId = req.user?._id;
 
         if (!sellerId) {
-            // Use return to ensure no further code in try block executes
             res.status(400).json({ message: 'Seller ID not found. User may not be authenticated correctly.' });
             return;
         }
 
         let uploadedImageUrls: string[] = [];
-
         const filesToProcess = req.files ? (Array.isArray(req.files) ? req.files : []) : (req.file ? [req.file] : []);
 
         if (filesToProcess.length > 0) {
-            for (const file of filesToProcess) {
-                const imageUrl = await uploadFileToS3(file);
-                uploadedImageUrls.push(imageUrl);
-            }
+            // Using Promise.all for concurrent uploads
+            uploadedImageUrls = await Promise.all(
+                filesToProcess.map(file => uploadFileToS3(file))
+            );
         }
 
         const product = new Product({
@@ -65,11 +60,26 @@ export const createProduct: RequestHandler = async (req: AuthenticatedRequest, r
             category,
             stock,
             sellerId,
-            imageKeys: uploadedImageUrls, // Assuming imageKeys store URLs now
+            imageKeys: uploadedImageUrls,
         });
 
-        await product.save();
-        res.status(201).json(product);
+        const savedProduct = await product.save();
+
+        // Emit stock update for newly created product (if initial stock > 0)
+        // This could be debated - often new products just appear.
+        // But if you want the frontend to react to ANY stock appearing, you can emit.
+        // For now, let's assume the main stock update event is for *changes* to existing stock.
+        // If you *do* want to emit here:
+        // if (savedProduct.stock > 0) {
+        //     io.emit('stockUpdate', {
+        //         productId: savedProduct._id.toString(),
+        //         newStock: savedProduct.stock,
+        //     });
+        //     console.log(`[Socket.IO]: Emitted stockUpdate for new product ${savedProduct._id}, stock: ${savedProduct.stock}`);
+        // }
+
+
+        res.status(201).json(savedProduct);
     } catch (error) {
         next(error);
     }
@@ -82,7 +92,6 @@ export const getSellerProducts: RequestHandler = async (req: AuthenticatedReques
             res.status(401).json({ message: 'User not authenticated' });
             return;
         }
-
         const products = await Product.find({ sellerId: sellerId }).sort({ createdAt: -1 });
         res.json(products);
     } catch (error) {
@@ -93,7 +102,6 @@ export const getSellerProducts: RequestHandler = async (req: AuthenticatedReques
 export const getProductById: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const product = await Product.findById(req.params.id).populate('sellerId', 'name email');
-        
         if (!product) {
             res.status(404).json({ message: 'Product not found' });
             return;
@@ -108,7 +116,7 @@ export const getProductById: RequestHandler = async (req: Request, res: Response
     }
 };
 
-export const updateProduct:RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const updateProduct: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const productId = req.params.id;
         const sellerId = req.user?._id;
@@ -127,14 +135,36 @@ export const updateProduct:RequestHandler = async (req: AuthenticatedRequest, re
         }
 
         const { name, description, price, category, stock } = req.body;
+        let stockActuallyChanged = false;
+        const oldStock = product.stock; // Store old stock to check if it changed
+
         if (name !== undefined) product.name = name;
         if (description !== undefined) product.description = description;
-        if (price !== undefined) product.price = price;
+        if (price !== undefined) product.price = Number(price); // Ensure price is a number
         if (category !== undefined) product.category = category;
-        if (stock !== undefined) product.stock = stock;
+        if (stock !== undefined && typeof stock === 'number' && product.stock !== stock) {
+            product.stock = stock;
+            stockActuallyChanged = true; // Mark that stock was intentionally changed
+        } else if (stock !== undefined && typeof stock !== 'number') {
+            // Handle case where stock is provided but not a number (e.g. empty string from form)
+            // You might want to log a warning or return an error
+            console.warn(`Stock value for product ${productId} was not a number: ${stock}`);
+        }
 
-        // TODO: Handle image updates
+
+        // TODO: Handle image updates (this is complex and involves deleting old S3 objects and uploading new ones)
+
         const updatedProduct = await product.save();
+
+        // If stock was actually changed by this update operation
+        if (stockActuallyChanged) {
+            io.emit('stockUpdate', {
+                productId: updatedProduct._id.toString(),
+                newStock: updatedProduct.stock,
+            });
+            console.log(`[Socket.IO]: Emitted stockUpdate (admin/seller update) for ${updatedProduct._id}, new stock: ${updatedProduct.stock}`);
+        }
+
         res.json(updatedProduct);
     } catch (error) {
         if (error instanceof Error && error.name === 'CastError') {
@@ -145,7 +175,7 @@ export const updateProduct:RequestHandler = async (req: AuthenticatedRequest, re
     }
 };
 
-export const deleteProduct : RequestHandler= async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const deleteProduct: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const productId = req.params.id;
         const sellerId = req.user?._id;
@@ -163,12 +193,13 @@ export const deleteProduct : RequestHandler= async (req: AuthenticatedRequest, r
             return;
         }
 
-        if (S3_BUCKET_NAME && product.imageKeys && product.imageKeys.length > 0) {
-            for (const imageUrl of product.imageKeys) {
-                try {
-                    const urlParts = new URL(imageUrl); // Make sure this is robust
-                    const key = decodeURIComponent(urlParts.pathname.substring(1)); // decode URI component
+        const stockBeforeDelete = product.stock; // Get stock before deleting
 
+        if (S3_BUCKET_NAME && product.imageKeys && product.imageKeys.length > 0) {
+            await Promise.all(product.imageKeys.map(async (imageUrl) => {
+                try {
+                    const urlParts = new URL(imageUrl);
+                    const key = decodeURIComponent(urlParts.pathname.substring(1));
                     if (key) {
                         const deleteParams = { Bucket: S3_BUCKET_NAME, Key: key };
                         await s3Client.send(new DeleteObjectCommand(deleteParams));
@@ -177,10 +208,22 @@ export const deleteProduct : RequestHandler= async (req: AuthenticatedRequest, r
                 } catch (s3Error) {
                     console.error(`Error processing S3 deletion for image ${imageUrl}:`, s3Error);
                 }
-            }
+            }));
         }
 
         await product.deleteOne();
+
+        // Emit a stock update event, setting stock to 0 as the product is gone
+        // This helps UIs remove or mark the product as unavailable immediately
+        if (stockBeforeDelete > 0) { // Only emit if there was stock to begin with
+             io.emit('stockUpdate', {
+                productId: productId.toString(), // Use productId as product._id is no longer valid
+                newStock: 0, // Product is deleted, so effective stock is 0
+             });
+             console.log(`[Socket.IO]: Emitted stockUpdate (product delete) for ${productId}, new stock: 0`);
+        }
+
+
         res.json({ message: 'Product deleted successfully' });
     } catch (error) {
         if (error instanceof Error && error.name === 'CastError') {
@@ -191,20 +234,18 @@ export const deleteProduct : RequestHandler= async (req: AuthenticatedRequest, r
     }
 };
 
-
-// --- GET /api/v1/products (List all products with pagination - Public) ---
-export const getAllProducts : RequestHandler= async (req: Request, res: Response, next: NextFunction) => {
+export const getAllProducts: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+    // ... (no changes to getAllProducts needed for this specific request) ...
+    // (Keep your existing implementation)
     try {
         const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 10; // Default limit to 10 items per page
+        const limit = parseInt(req.query.limit as string) || 10;
         const skip = (page - 1) * limit;
-
-        // Optional: Add filtering criteria here later (e.g., by category, inStock: true)
-        const queryConditions = {}; // e.g., { stock: { $gt: 0 } } for in-stock items
+        const queryConditions = {};
 
         const products = await Product.find(queryConditions)
-            .populate('sellerId', 'name') // Populate seller's name
-            .sort({ createdAt: -1 })     // Sort by newest first
+            .populate('sellerId', 'name')
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit);
 
@@ -226,10 +267,11 @@ export const getAllProducts : RequestHandler= async (req: Request, res: Response
     }
 };
 
-// --- GET /api/v1/products/search (Search products with pagination) ---
 export const searchProducts: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+    // ... (no changes to searchProducts needed for this specific request) ...
+    // (Keep your existing implementation)
     try {
-        const query = req.query.q as string; // The search term
+        const query = req.query.q as string;
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
         const skip = (page - 1) * limit;
@@ -239,73 +281,26 @@ export const searchProducts: RequestHandler = async (req: Request, res: Response
             return
         }
 
-        // Construct the aggregation pipeline
-        const aggregationPipeline = [
+        const aggregationPipeline: any[] = [ // Added 'any[]' for simplicity, can be more specific
             {
                 $search: {
-                    index: 'product_search_index', // The name of your Atlas Search index
-                    text: {
-                        query: query,
-                        path: ['name', 'description', 'category'], // Fields to search in
-                        fuzzy: { // Optional: allow for some misspellings
-                            maxEdits: 1, // Max 1 character difference
-                            prefixLength: 2 // Don't apply fuzzy search to first 2 chars
-                        }
-                    },
-                    // Optional: Highlighting (adds a 'highlights' field to documents)
-                    // highlight: {
-                    //     path: ['name', 'description']
-                    // }
+                    index: 'product_search_index',
+                    text: { query: query, path: ['name', 'description', 'category'], fuzzy: { maxEdits: 1, prefixLength: 2 } }
                 },
             },
-            // Optional: Add a $project stage if you want to shape the output or add score
-            // {
-            //     $project: {
-            //         _id: 1, name: 1, description: 1, price: 1, category: 1,
-            //         stock: 1, sellerId: 1, imageKeys: 1, createdAt: 1, updatedAt: 1,
-            //         score: { $meta: "searchScore" } // Adds the relevance score
-            //     }
-            // },
-            // {
-            //     $sort: { score: { $meta: "searchScore" } } // Sort by relevance score
-            // },
+            { $lookup: { from: 'users', localField: 'sellerId', foreignField: '_id', as: 'sellerInfo' } },
+            { $unwind: { path: '$sellerInfo', preserveNullAndEmptyArrays: true } },
             {
-                $lookup: { // Populate sellerId after search
-                    from: 'users', // The name of the users collection
-                    localField: 'sellerId',
-                    foreignField: '_id',
-                    as: 'sellerInfo'
+                $project: {
+                    _id: 1, name: 1, description: 1, price: 1, category: 1, stock: 1, imageKeys: 1,
+                    createdAt: 1, updatedAt: 1, numReviews: 1, averageRating: 1,
+                    sellerId: { _id: '$sellerInfo._id', name: '$sellerInfo.name' },
                 }
             },
-            {
-                $unwind: { // Unwind the sellerInfo array (should only be one seller)
-                    path: '$sellerInfo',
-                    preserveNullAndEmptyArrays: true // Keep product if seller not found (edge case)
-                }
-            },
-            {
-                $project: { // Define final output shape, select seller fields
-                    _id: 1, name: 1, description: 1, price: 1, category: 1,
-                    stock: 1, imageKeys: 1, createdAt: 1, updatedAt: 1,
-                    numReviews: 1, averageRating: 1, // Keep existing fields
-                    sellerId: { // Re-shape sellerId to include only name
-                        _id: '$sellerInfo._id',
-                        name: '$sellerInfo.name',
-                    },
-                    // score: { $meta: "searchScore" } // If you projected score earlier
-                    // highlights: 1 // If you enabled highlighting
-                }
-            },
-            {
-                $facet: { // For pagination with aggregation
-                    paginatedResults: [{ $skip: skip }, { $limit: limit }],
-                    totalCount: [{ $count: 'count' }],
-                },
-            },
+            { $facet: { paginatedResults: [{ $skip: skip }, { $limit: limit }], totalCount: [{ $count: 'count' }] } },
         ];
 
         const results = await Product.aggregate(aggregationPipeline);
-
         const products = results[0].paginatedResults;
         const totalProducts = results[0].totalCount[0] ? results[0].totalCount[0].count : 0;
         const totalPages = Math.ceil(totalProducts / limit);
@@ -313,17 +308,9 @@ export const searchProducts: RequestHandler = async (req: Request, res: Response
         res.json({
             message: 'Search results fetched successfully',
             data: products,
-            pagination: {
-                currentPage: page,
-                totalPages: totalPages,
-                totalProducts: totalProducts,
-                pageSize: limit,
-            },
-            // query: query // Optionally return the query term
+            pagination: { currentPage: page, totalPages: totalPages, totalProducts: totalProducts, pageSize: limit, },
         });
-
     } catch (error) {
         next(error);
     }
 };
-
