@@ -25,9 +25,19 @@
             <!-- Pagination buttons will be here -->
         </div>
     </div>
-
-    <script type="module" src="js/main.js"></script>
-    <script type="module" src="js/productList.js"></script>
+    <!-- In frontend/index.html, product-detail.html, cart.html etc. -->
+    <button id="chat-toggle-button" style="position: fixed; bottom: 20px; right: 20px; z-index: 1001; padding: 10px 15px;">Chat</button>
+    <div id="chat-widget-container" style="display: none; position: fixed; bottom: 70px; right: 20px; width: 300px; height: 400px; border: 1px solid #ccc; background-color: white; z-index: 1000; box-shadow: 0 0 10px rgba(0,0,0,0.2); border-radius: 5px; flex-direction: column;">
+    <div id="chat-messages" style="flex-grow: 1; padding: 10px; overflow-y: auto; border-bottom: 1px solid #eee;"></div>
+    <div style="padding: 10px; display: flex;">
+        <input type="text" id="chat-input" placeholder="Type your message..." style="flex-grow: 1; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+        <button id="chat-send-button" style="margin-left: 5px; padding: 8px 12px;">Send</button>
+    </div>
+    </div>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="js/ts/main.js"></script>
+    <script type="module" src="js/ts/productList.js"></script>
+
+    
 </body>
 </html>
