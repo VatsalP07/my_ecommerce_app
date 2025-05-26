@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Add Product</title>
+    <link rel="stylesheet" href="../css/style.css"> <!-- Correct -->
+     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script> <!
+</head>
+<body>
+    <nav>
+        <div><a href="/">Store Home</a> | <a href="/admin/products.html">Admin Products</a> | <a href="/admin/add-product.html">Add Product</a></div>
+        <div id="auth-links-admin"></div>
+    </nav>
+
+    <div class="container">
+        <h1>Add New Product</h1>
+        <form id="add-product-form">
+            <!-- ... (form fields as defined in the previous Day 11 response) ... -->
+            <div class="form-group">
+                <label for="name">Product Name:</label>
+                <input type="text" id="name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="description">Description:</label>
+                <textarea id="description" name="description" rows="4" required style="width: calc(100% - 22px); padding: 10px; border: 1px solid #ddd; border-radius: 4px;"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="price">Price:</label>
+                <input type="number" id="price" name="price" step="0.01" min="0" required>
+            </div>
+            <div class="form-group">
+                <label for="category">Category:</label>
+                <input type="text" id="category" name="category" required>
+            </div>
+            <div class="form-group">
+                <label for="stock">Stock Quantity:</label>
+                <input type="number" id="stock" name="stock" min="0" required>
+            </div>
+            <div class="form-group">
+                <label for="productImages">Product Images (select one or more):</label>
+                <input type="file" id="productImages" name="productImages" multiple accept="image/*">
+            </div>
+            <button type="submit">Add Product</button>
+            <p class="error-message" id="add-product-error"></p>
+            <p class="success-message" id="add-product-success" style="color: green;"></p>
+        </form>
+    </div>
+
+    <!-- Corrected script paths relative to frontend/admin/add-product.html -->
+    <script type="module" src="../js/ts/main.js"></script>
+    <script type="module" src="../js/admin/ts/adminAddProduct.js"></script>
+</body>
+</html>

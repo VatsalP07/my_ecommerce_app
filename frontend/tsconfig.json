@@ -1,18 +1,19 @@
-// frontend/tsconfig.json
 {
   "compilerOptions": {
-    "target": "ES2020", // Compile to modern JavaScript
-    "module": "ESNext", // Use ES modules for browser
-    "moduleResolution": "node", // How modules are resolved
-    "outDir": "./js", // Output compiled JS files to a 'js' directory
-    "rootDir": "./ts", // Source TS files are in 'ts'
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "outDir": "./js", // Base output directory
+    "rootDir": ".",    // Root is the frontend folder
     "esModuleInterop": true,
     "strict": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "sourceMap": true, // Generate source maps for easier debugging
-    "lib": ["DOM", "ES2020"] // Include DOM type definitions for browser environment
+    // ... other options ...
+    "baseUrl": ".", // Important for preserving folder structure in outDir
+    "paths": { // Optional, but can help with imports
+      "ts/*": ["ts/*"],
+      "admin/ts/*": ["admin/ts/*"]
+    }
   },
-  "include": ["ts/**/*"], // Only compile files in the 'ts' directory
-  "exclude": ["node_modules"]
+  "include": ["ts/**/*.ts", "admin/ts/**/*.ts"],
+  "exclude": ["node_modules", "js"] // Exclude the output 'js' folder itself
 }
