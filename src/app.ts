@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path'; // Node.js path module for working with file and directory paths
 import mongoose from 'mongoose';
 import http from 'http'; // Import Node.js http module
+import adminRoutes from './routes/adminRoutes';
 import { Server as SocketIOServer, Socket } from 'socket.io'; // Import Socket.IO Server
 
 // Configs
@@ -14,6 +15,7 @@ import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
 import cartRoutes from './routes/cartRoutes';
 import orderRoutes from './routes/orderRoutes';
+
 
 // --- Load Environment Variables ---
 dotenv.config();
@@ -87,7 +89,7 @@ io.on('connection', (socket: Socket) => {
 // --- Serve Frontend Static Files ---
 // Define the path to your 'frontend' directory.
 const frontendPath = path.join(__dirname, '..', 'frontend');
-
+app.use('/api/v1/admin', adminRoutes);
 // Serve specific asset folders like 'css', 'js' directly.
 app.use('/css', express.static(path.join(frontendPath, 'css')));
 app.use('/js', express.static(path.join(frontendPath, 'js')));

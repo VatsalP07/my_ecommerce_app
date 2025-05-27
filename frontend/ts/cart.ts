@@ -1,12 +1,11 @@
 // frontend/ts/cart.ts
-import { API_BASE_URL, getToken, updateCartCount, updateNav, removeToken } from './main.js';
+import { API_BASE_URL, getToken, updateCartCount, updateNav, removeToken } from './main.js'; // Ensure .js for browser modules
 
 const cartItemsContainer = document.getElementById('cart-items-container');
 const totalItemsSpan = document.getElementById('total-items');
 const totalPriceSpan = document.getElementById('total-price');
 const clearCartButton = document.getElementById('clear-cart-button');
-const checkoutButton = document.getElementById('checkout-button');
-
+const checkoutButton = document.getElementById('checkout-button'); // This is the button from your cart.html
 
 async function fetchCart() {
     if (!cartItemsContainer || !totalItemsSpan || !totalPriceSpan) return;
@@ -16,8 +15,8 @@ async function fetchCart() {
         cartItemsContainer.innerHTML = '<p>Please <a href="/login.html?redirect=/cart.html">login</a> to view your cart.</p>';
         totalItemsSpan.textContent = '0';
         totalPriceSpan.textContent = '0.00';
-        if(clearCartButton) (clearCartButton as HTMLButtonElement).disabled = true;
-        if(checkoutButton) (checkoutButton as HTMLButtonElement).disabled = true;
+        if (clearCartButton) (clearCartButton as HTMLButtonElement).disabled = true;
+        if (checkoutButton) (checkoutButton as HTMLButtonElement).disabled = true; // Disable if not logged in
         return;
     }
 
@@ -32,7 +31,7 @@ async function fetchCart() {
             if (response.status === 401) { // Unauthorized, token might be bad
                 removeToken();
                 updateNav(); // Update nav to show login links
-                fetchCart(); // Re-call to show login message
+                fetchCart(); // Re-call to show login message and disable buttons
                 return;
             }
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -43,23 +42,29 @@ async function fetchCart() {
     } catch (error: any) {
         console.error('Failed to fetch cart:', error);
         cartItemsContainer.innerHTML = `<p>Error loading cart: ${error.message}</p>`;
+        // Keep buttons disabled on error or handle appropriately
+        if (clearCartButton) (clearCartButton as HTMLButtonElement).disabled = true;
+        if (checkoutButton) (checkoutButton as HTMLButtonElement).disabled = true;
     }
 }
 
 function renderCart(cart: any) {
     if (!cartItemsContainer || !totalItemsSpan || !totalPriceSpan) return;
 
-    if (!cart || !cart.items || cart.items.length === 0) {
+    const hasItems = cart && cart.items && cart.items.length > 0;
+
+    if (!hasItems) {
         cartItemsContainer.innerHTML = '<p>Your cart is empty.</p>';
         totalItemsSpan.textContent = '0';
         totalPriceSpan.textContent = '0.00';
-        if(clearCartButton) (clearCartButton as HTMLButtonElement).disabled = true;
-        if(checkoutButton) (checkoutButton as HTMLButtonElement).disabled = true;
+        if (clearCartButton) (clearCartButton as HTMLButtonElement).disabled = true;
+        if (checkoutButton) (checkoutButton as HTMLButtonElement).disabled = true;
         return;
     }
 
-    if(clearCartButton) (clearCartButton as HTMLButtonElement).disabled = false;
-    if(checkoutButton) (checkoutButton as HTMLButtonElement).disabled = false;
+    // Enable buttons if there are items
+    if (clearCartButton) (clearCartButton as HTMLButtonElement).disabled = false;
+    if (checkoutButton) (checkoutButton as HTMLButtonElement).disabled = false;
 
     cartItemsContainer.innerHTML = cart.items.map((item: any) => `
         <div class="cart-item" data-cart-item-id="${item._id}">
@@ -80,7 +85,7 @@ function renderCart(cart: any) {
     totalItemsSpan.textContent = cart.totalQuantity?.toString() || '0';
     totalPriceSpan.textContent = cart.totalPrice?.toFixed(2) || '0.00';
 
-    // Add event listeners for quantity changes and remove buttons
+    // Re-add event listeners after re-rendering cart items
     document.querySelectorAll('.item-quantity-input').forEach(input => {
         input.addEventListener('change', handleQuantityChange);
     });
@@ -90,6 +95,7 @@ function renderCart(cart: any) {
 }
 
 async function handleQuantityChange(event: Event) {
+    // ... (this function remains the same as previously defined for Day 12)
     const input = event.target as HTMLInputElement;
     const cartItemDiv = input.closest('.cart-item') as HTMLElement;
     const cartItemId = cartItemDiv.dataset.cartItemId;
@@ -99,17 +105,14 @@ async function handleQuantityChange(event: Event) {
 
     if (isNaN(newQuantity) || newQuantity < 1) {
         alert('Quantity must be at least 1.');
-        fetchCart(); // Re-fetch to reset to valid state
+        fetchCart(); 
         return;
     }
     if (newQuantity > maxStock) {
         alert(`Cannot exceed available stock (${maxStock}).`);
-        input.value = maxStock.toString(); // Reset to max stock
-        // Optionally, you could proceed with maxStock or just show error and re-fetch
-        // For now, let's just correct the input and let user confirm.
-        return; // Or call update API with maxStock
+        input.value = maxStock.toString(); 
+        return; 
     }
-
 
     if (!cartItemId) return;
 
@@ -126,16 +129,17 @@ async function handleQuantityChange(event: Event) {
         if (!response.ok) {
             throw new Error(result.message || 'Failed to update quantity');
         }
-        renderCart(result.data); // Re-render cart with updated data
+        renderCart(result.data); 
         updateCartCount();
     } catch (error: any) {
         console.error('Update quantity error:', error);
         alert(`Error: ${error.message}`);
-        fetchCart(); // Re-fetch to ensure UI consistency
+        fetchCart(); 
     }
 }
 
 async function handleRemoveItem(event: Event) {
+    // ... (this function remains the same as previously defined for Day 12)
     const button = event.target as HTMLButtonElement;
     const cartItemDiv = button.closest('.cart-item') as HTMLElement;
     const cartItemId = cartItemDiv.dataset.cartItemId;
@@ -160,8 +164,9 @@ async function handleRemoveItem(event: Event) {
     }
 }
 
-if(clearCartButton) {
+if (clearCartButton) {
     clearCartButton.addEventListener('click', async () => {
+        // ... (this function remains the same)
         if (!confirm('Are you sure you want to clear your entire cart?')) return;
         try {
             const response = await fetch(`${API_BASE_URL}/cart`, {
@@ -179,15 +184,31 @@ if(clearCartButton) {
     });
 }
 
-if(checkoutButton) {
+// ***** UPDATED CHECKOUT BUTTON LOGIC *****
+if (checkoutButton) {
     checkoutButton.addEventListener('click', () => {
-        alert('Checkout process not yet implemented!');
-        // Later, this would redirect to a checkout page or start a payment flow
+        const token = getToken();
+        if (!token) {
+            alert('Please login to proceed to checkout.');
+            // Redirect to login, then back to cart, then user can click checkout again
+            window.location.href = `/login.html?redirect=/cart.html`;
+            return;
+        }
+
+        // Check if cart has items before proceeding
+        const currentTotalItems = parseInt(totalItemsSpan?.textContent || '0');
+        if (currentTotalItems === 0) {
+            alert('Your cart is empty. Please add items before proceeding to checkout.');
+            return;
+        }
+
+        // Navigate to the new checkout page
+        window.location.href = '/checkout.html';
     });
 }
 
-
 // Initial load for cart page
-if (window.location.pathname.includes('/cart.html')) {
-    fetchCart();
-}
+document.addEventListener('DOMContentLoaded', () => {
+    updateNav(); // Update main navigation (auth links, etc.)
+    fetchCart(); // Fetch and render cart details
+});

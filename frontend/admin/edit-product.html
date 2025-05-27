@@ -2,37 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Edit Product</title>
-    <link rel="stylesheet" href="../css/style.css"> <!-- Correct -->
-     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script> <!
+    <link rel="stylesheet" href="../css/style.css"> <!-- Path to main style.css -->
 </head>
 <body>
     <nav>
         <div><a href="/">Store Home</a> | <a href="/admin/products.html">Admin Products</a> | <a href="/admin/add-product.html">Add Product</a></div>
-        <!-- Auth links would go here; consider a shared admin nav component later -->
+        <div id="auth-links-admin"></div>
     </nav>
+
     <div class="container">
-        <h1>Edit Product (Coming Soon)</h1>
-        <p>Product ID: <span id="product-id-display"></span></p>
+        <h1>Edit Product</h1>
+        <div id="edit-product-form-container">
+            <p>Loading product data...</p>
+            <!-- Form will be injected here by JS or pre-written and populated -->
+        </div>
     </div>
 
-    <!-- If you add adminEditProduct.ts in frontend/admin/ts/: -->
-    <!-- <script type="module" src="../js/admin/ts/adminEditProduct.js"></script> -->
-    <script type="module">
-        // Basic script to show product ID from URL, could also use main.js for auth nav
-        // For example, to use main.js for nav:
-        // import { updateNav } from '../js/ts/main.js';
-        document.addEventListener('DOMContentLoaded', () => {
-            // updateNav(); // If you want the standard nav behavior from main.js
-            const params = new URLSearchParams(window.location.search);
-            const productId = params.get('id');
-            const displayEl = document.getElementById('product-id-display');
-            if (displayEl && productId) {
-                displayEl.textContent = productId;
-            } else if (displayEl) {
-                displayEl.textContent = 'No ID provided.';
-            }
-        });
-    </script>
+    <!-- Corrected script paths -->
+     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="../js/ts/main.js"></script>
+    <script type="module" src="../js/admin/ts/adminEditProduct.js"></script>
 </body>
 </html>
