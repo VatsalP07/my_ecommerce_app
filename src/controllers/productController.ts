@@ -33,6 +33,29 @@ const uploadFileToS3 = async (file: Express.Multer.File): Promise<string> => {
     return `https://${S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileKey}`;
 };
 
+
+const deleteFileFromS3 = async (imageUrl: string): Promise<void> => {
+    if (!S3_BUCKET_NAME) {
+        console.warn('S3_BUCKET_NAME not defined, cannot delete from S3.');
+        return; // Or throw new Error('S3_BUCKET_NAME is not defined');
+    }
+    try {
+        const urlParts = new URL(imageUrl);
+        // S3 keys should not have a leading slash when used with the SDK's Key parameter
+        const key = decodeURIComponent(urlParts.pathname.substring(1)); 
+        if (key) {
+            const deleteParams = { Bucket: S3_BUCKET_NAME, Key: key };
+            await s3Client.send(new DeleteObjectCommand(deleteParams));
+            console.log(`Successfully deleted ${key} from S3`);
+        }
+    } catch (s3Error: any) { // Catch specific error if possible
+        console.error(`Error deleting image ${imageUrl} from S3. Key: ${new URL(imageUrl).pathname.substring(1)}. Error:`, s3Error.message || s3Error);
+        // Decide if you want to throw this error or just log it and continue
+        // For example, if an image was already deleted or URL is malformed, you might not want to fail the whole update.
+        // throw s3Error; // Uncomment to make S3 deletion failure stop the update
+    }
+};
+
 export const createProduct: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { name, description, price, category, stock } = req.body;
@@ -134,35 +157,53 @@ export const updateProduct: RequestHandler = async (req: AuthenticatedRequest, r
             return;
         }
 
+        // Text fields from req.body (populated by multer if form-data)
         const { name, description, price, category, stock } = req.body;
         let stockActuallyChanged = false;
-        const oldStock = product.stock; // Store old stock to check if it changed
 
+        // Update text fields
         if (name !== undefined) product.name = name;
         if (description !== undefined) product.description = description;
-        if (price !== undefined) product.price = Number(price); // Ensure price is a number
+        if (price !== undefined) product.price = Number(price);
         if (category !== undefined) product.category = category;
-        if (stock !== undefined && typeof stock === 'number' && product.stock !== stock) {
-            product.stock = stock;
-            stockActuallyChanged = true; // Mark that stock was intentionally changed
-        } else if (stock !== undefined && typeof stock !== 'number') {
-            // Handle case where stock is provided but not a number (e.g. empty string from form)
-            // You might want to log a warning or return an error
-            console.warn(`Stock value for product ${productId} was not a number: ${stock}`);
+        if (stock !== undefined) {
+            const newStock = Number(stock);
+            if (!isNaN(newStock) && product.stock !== newStock) {
+                product.stock = newStock;
+                stockActuallyChanged = true;
+            }
         }
 
+        // Handle image updates
+        // 'req.files' will be an array if using upload.array('productImages', ...) on the route
+        const newImageFiles = req.files as Express.Multer.File[] | undefined;
 
-        // TODO: Handle image updates (this is complex and involves deleting old S3 objects and uploading new ones)
+        if (newImageFiles && newImageFiles.length > 0) {
+            // 1. Delete old images from S3
+            if (product.imageKeys && product.imageKeys.length > 0) {
+                await Promise.all(product.imageKeys.map(imageUrl => deleteFileFromS3(imageUrl)));
+            }
 
-        const updatedProduct = await product.save();
+            // 2. Upload new images to S3
+            const newImageUrls = await Promise.all(
+                newImageFiles.map(file => uploadFileToS3(file))
+            );
 
-        // If stock was actually changed by this update operation
+            // 3. Update product.imageKeys
+            product.imageKeys = newImageUrls;
+        }
+        // If no new files are uploaded, product.imageKeys remains unchanged.
+        // If you want to allow *deleting all images*, you'd need a separate mechanism
+        // (e.g., a specific field in FormData like 'clearImages=true').
+
+        const updatedProduct = await product.save(); // Save all changes (text and/or images)
+
         if (stockActuallyChanged) {
             io.emit('stockUpdate', {
                 productId: updatedProduct._id.toString(),
                 newStock: updatedProduct.stock,
             });
-            console.log(`[Socket.IO]: Emitted stockUpdate (admin/seller update) for ${updatedProduct._id}, new stock: ${updatedProduct.stock}`);
+            console.log(`[Socket.IO]: Emitted stockUpdate for ${updatedProduct._id}, new stock: ${updatedProduct.stock}`);
         }
 
         res.json(updatedProduct);
@@ -174,6 +215,7 @@ export const updateProduct: RequestHandler = async (req: AuthenticatedRequest, r
         next(error);
     }
 };
+
 
 export const deleteProduct: RequestHandler = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {

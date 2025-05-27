@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .checkout-summary { margin-bottom: 20px; border: 1px solid #eee; padding: 15px; }
+        .checkout-summary h3 { margin-top: 0; }
+        .form-section { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div><a href="/">Home</a></div>
+        <div id="auth-links"></div>
+        <div><a href="/cart.html">Cart (<span id="cart-count">0</span>)</a></div>
+    </nav>
+
+    <div class="container">
+        <h1>Checkout</h1>
+
+        <div id="checkout-content">
+            <div class="checkout-summary">
+                <h3>Order Summary</h3>
+                <div id="order-summary-items">
+                    <p>Loading summary...</p>
+                </div>
+                <p><strong>Total Price: $<span id="summary-total-price">0.00</span></strong></p>
+            </div>
+
+            <div class="form-section" id="shipping-address-form">
+                <h3>Shipping Address (Simplified)</h3>
+                <div class="form-group">
+                    <label for="address">Address:</label>
+                    <input type="text" id="address" name="address" value="123 Default St" required>
+                </div>
+                <div class="form-group">
+                    <label for="city">City:</label>
+                    <input type="text" id="city" name="city" value="Defaultville" required>
+                </div>
+                <div class="form-group">
+                    <label for="postalCode">Postal Code:</label>
+                    <input type="text" id="postalCode" name="postalCode" value="D0F0L0" required>
+                </div>
+                 <div class="form-group">
+                    <label for="country">Country:</label>
+                    <input type="text" id="country" name="country" value="Defaultland" required>
+                </div>
+            </div>
+
+            <div class="form-section" id="payment-method-selection">
+                <h3>Payment Method (Simulated)</h3>
+                <select id="paymentMethod" name="paymentMethod">
+                    <option value="SimulatedCard">Simulated Credit Card</option>
+                    <option value="SimulatedPayPal">Simulated PayPal</option>
+                </select>
+            </div>
+
+            <button id="confirm-order-pay-btn">Confirm Order & Pay (Simulated)</button>
+            <p id="checkout-message" style="margin-top: 15px;"></p>
+        </div>
+    </div>
+
+    <!-- Corrected script paths -->
+     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="js/ts/main.js"></script>
+    <script type="module" src="js/ts/checkout.js"></script>
+</body>
+</html>

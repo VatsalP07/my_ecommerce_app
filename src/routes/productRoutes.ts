@@ -46,15 +46,14 @@ router.get('/:id', getProductById);
 
 
 // --- PUT /api/v1/products/:id (Update a product - Seller or Admin) ---
+// src/routes/productRoutes.ts
 router.put(
     '/:id',
     passport.authenticate('jwt', { session: false }),
-    authorize(['seller', 'admin']), // Ensure only product owner or admin can update
-    // If you want to handle image updates here, add upload middleware:
-    // upload.array('newProductImages', 5),
+    authorize(['seller', 'admin']),
+    upload.array('productImages', 5), // ESSENTIAL if frontend sends FormData
     updateProduct
 );
-
 // --- DELETE /api/v1/products/:id (Delete a product - Seller or Admin) ---
 router.delete(
     '/:id',

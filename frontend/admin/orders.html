@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Manage Orders</title>
+    <link rel="stylesheet" href="../css/style.css"> <!-- Path to main style.css -->
+    <style>
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f0f0f0; }
+        .actions a { margin-right: 5px; font-size: 0.9em; padding: 3px 6px;}
+        .status-processing { color: orange; font-weight: bold; }
+        .status-shipped { color: blue; font-weight: bold; }
+        .status-delivered { color: green; font-weight: bold; }
+        .status-cancelled, .status-failed { color: red; font-weight: bold; }
+        .status-pending-payment { color: grey; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div>
+            <a href="/">Store Home</a> | 
+            <a href="/admin/products.html">Products</a> | 
+            <a href="/admin/orders.html">Orders</a> |
+            <a href="/admin/users.html">Users</a>
+        </div>
+        <div id="auth-links-admin"></div> <!-- For admin logout -->
+    </nav>
+
+    <div class="container">
+        <h1>Manage Orders</h1>
+        <div id="admin-order-list">
+            <p>Loading orders...</p>
+        </div>
+        <!-- Pagination can be added here later -->
+    </div>
+
+    <!-- Corrected script paths relative to frontend/admin/orders.html -->
+     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="../js/ts/main.js"></script>
+    <script type="module" src="../js/admin/ts/adminOrders.js"></script>
+</body>
+</html>

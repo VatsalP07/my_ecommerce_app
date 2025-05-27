@@ -6,8 +6,7 @@ import {
     createOrder,
     getUserOrders,
     getOrderById,
-    getAllOrdersAdmin,
-    updateOrderStatusAdmin
+    markOrderAsPaid
 } from '../controllers/orderController';
 
 const router = express.Router();
@@ -32,20 +31,9 @@ router.get(
 );
 
 
-// --- Admin Routes ---
-router.get(
-    '/admin/all', // Differentiate admin route clearly
-    passport.authenticate('jwt', { session: false }),
-    authorize(['admin']),
-    getAllOrdersAdmin
-);
-
 router.put(
-    '/admin/:id/status',
-    passport.authenticate('jwt', { session: false }),
-    authorize(['admin']),
-    updateOrderStatusAdmin
-);
-
+    '/:orderId/pay', 
+     passport.authenticate('jwt', { session: false }),
+    markOrderAsPaid);
 
 export default router;

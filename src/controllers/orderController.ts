@@ -3,15 +3,15 @@ import { Request, Response, NextFunction } from 'express';
 import Order, { IOrder, IOrderItem } from '../models/Order';
 import Product, { IProduct } from '../models/Product';
 import Cart from '../models/Cart';
-import { IUser } from '../models/user'; // Corrected import path assuming User.ts
+import { IUser } from '../models/user'; // Corrected path assuming User.ts is in models/
 import mongoose from 'mongoose';
-import { io } from '../app'; // Import the exported io instance
+import { io } from '../app';
 
 interface AuthenticatedRequest extends Request {
   user?: IUser;
 }
 
-// POST /api/v1/orders - Create a new order
+// POST /api/v1/orders - Create a new order (for a logged-in user)
 export const createOrder = async (
     req: AuthenticatedRequest,
     res: Response,
@@ -25,15 +25,17 @@ export const createOrder = async (
         }
 
         const {
-            orderItems: clientOrderItems, // Renamed to avoid conflict with detailedOrderItems
+            orderItems: clientOrderItems, // Expecting this from client if not using cart directly
             shippingAddress,
             paymentMethod,
         } = req.body;
 
+        // Validate clientOrderItems, shippingAddress, paymentMethod
         if (!clientOrderItems || !Array.isArray(clientOrderItems) || clientOrderItems.length === 0) {
             res.status(400).json({ message: 'No order items provided or invalid format.' });
             return;
         }
+        // Consider more robust validation for shippingAddress structure
         if (!shippingAddress || !shippingAddress.address || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
             res.status(400).json({ message: 'Shipping address is incomplete.' });
             return;
@@ -45,113 +47,95 @@ export const createOrder = async (
 
         const detailedOrderItems: IOrderItem[] = [];
         let calculatedItemsPrice = 0;
-        const productsToUpdateStock: { product: IProduct, quantityChange: number }[] = [];
+        const productsToUpdateStock: { productDoc: IProduct, quantityToDecrement: number }[] = [];
 
-        // Optional: Start a MongoDB transaction for atomicity
-        // const session = await mongoose.startSession();
-        // session.startTransaction();
-
-        try {
-            for (const item of clientOrderItems) {
-                if (!item.productId || typeof item.quantity !== 'number' || item.quantity < 1) {
-                    // await session.abortTransaction(); session.endSession();
-                    res.status(400).json({ message: `Invalid item data for productId: ${item.productId}` });
-                    return;
-                }
-
-                const product: IProduct | null = await Product.findById(item.productId); // .session(session) if using transactions
-                if (!product) {
-                    // await session.abortTransaction(); session.endSession();
-                    res.status(404).json({ message: `Product with ID ${item.productId} not found.` });
-                    return;
-                }
-                if (product.stock < item.quantity) {
-                    // await session.abortTransaction(); session.endSession();
-                    res.status(400).json({ message: `Not enough stock for ${product.name}. Available: ${product.stock}` });
-                    return;
-                }
-
-                // Don't save product stock yet, do it after order is saved or in a transaction
-                productsToUpdateStock.push({ product, quantityChange: -item.quantity });
-
-                detailedOrderItems.push({
-                    product: product._id,
-                    name: product.name,
-                    quantity: item.quantity,
-                    price: product.price, // Price at time of order
-                    image: product.imageKeys && product.imageKeys.length > 0 ? product.imageKeys[0] : undefined,
-                });
-                calculatedItemsPrice += product.price * item.quantity;
+        for (const item of clientOrderItems) {
+            if (!item.productId || typeof item.quantity !== 'number' || item.quantity < 1) {
+                res.status(400).json({ message: `Invalid item data for productId: ${item.productId}` });
+                return;
             }
 
-            const taxPrice = Number((0.1 * calculatedItemsPrice).toFixed(2)); // Example tax
-            const shippingPrice = calculatedItemsPrice > 100 ? 0 : 10; // Example shipping
-            const totalPrice = Number((calculatedItemsPrice + taxPrice + shippingPrice).toFixed(2));
+            const product: IProduct | null = await Product.findById(item.productId);
+            if (!product) {
+                res.status(404).json({ message: `Product with ID ${item.productId} not found.` });
+                return;
+            }
+            if (product.stock < item.quantity) {
+                res.status(400).json({ message: `Not enough stock for ${product.name}. Available: ${product.stock}` });
+                return;
+            }
 
-            const order = new Order({
-                user: userId,
-                orderItems: detailedOrderItems,
-                shippingAddress,
-                paymentMethod,
-                itemsPrice: calculatedItemsPrice,
-                taxPrice,
-                shippingPrice,
-                totalPrice,
-                orderStatus: 'Pending', // Initial status
-                isPaid: false, // Assuming payment is processed separately or simulated
+            productsToUpdateStock.push({ productDoc: product, quantityToDecrement: item.quantity });
+
+            detailedOrderItems.push({
+                product: product._id,
+                name: product.name,
+                quantity: item.quantity,
+                price: product.price, // Using current product price when creating order
+                image: product.imageKeys && product.imageKeys.length > 0 ? product.imageKeys[0] : undefined,
+            } as IOrderItem);
+            calculatedItemsPrice += product.price * item.quantity;
+        }
+
+        // Simplified tax and shipping for example
+        const taxPrice = Number((0.1 * calculatedItemsPrice).toFixed(2)); // 10% tax
+        const shippingPrice = calculatedItemsPrice > 100 ? 0 : 10; // Free shipping over $100
+        const totalPrice = Number((calculatedItemsPrice + taxPrice + shippingPrice).toFixed(2));
+
+        const order = new Order({
+            user: userId,
+            orderItems: detailedOrderItems,
+            shippingAddress,
+            paymentMethod,
+            itemsPrice: calculatedItemsPrice,
+            taxPrice,
+            shippingPrice,
+            totalPrice,
+            status: 'Pending Payment', // Default status
+            isPaid: false, // Default not paid
+        });
+
+        const createdOrder = await order.save();
+
+        // Update stock for each product
+        for (const { productDoc, quantityToDecrement } of productsToUpdateStock) {
+            productDoc.stock -= quantityToDecrement;
+            if (productDoc.stock < 0) productDoc.stock = 0; // Ensure stock doesn't go negative
+            await productDoc.save();
+
+            // Emit stock update via Socket.IO
+            io.emit('stockUpdate', {
+                productId: productDoc._id.toString(),
+                newStock: productDoc.stock,
             });
+            console.log(`[Socket.IO]: Emitted stockUpdate for ${productDoc._id}, new stock: ${productDoc.stock}`);
+        }
 
-            const createdOrder = await order.save(); // { session }
+        // Clear the user's cart after order creation
+        // Assuming createOrder takes items from req.body and not directly from a persisted Cart model.
+        // If createOrder was supposed to use items from a Cart model, you'd fetch and clear that.
+        // For now, if clientOrderItems are passed in req.body, cart clearing logic might be on client-side
+        // or handled if you were fetching cart from DB here.
+        // If you want to clear a persisted cart from DB:
+        await Cart.findOneAndUpdate({ user: userId }, { $set: { items: [] } });
+        console.log(`Cart cleared for user ${userId}`);
 
-            // --- Update product stock and emit Socket.IO events for each stock change ---
-            for (const { product, quantityChange } of productsToUpdateStock) {
-                product.stock += quantityChange; // product.stock -= item.quantity
-                if (product.stock < 0) product.stock = 0; // Ensure stock doesn't go negative
-                await product.save(); // { session }
 
-                // Emit stock update event via Socket.IO
-                io.emit('stockUpdate', {
-                    productId: product._id.toString(),
-                    newStock: product.stock,
-                });
-                console.log(`[Socket.IO]: Emitted stockUpdate for ${product._id}, new stock: ${product.stock}`);
-            }
-
-            // Clear the user's cart after successful order creation
-            await Cart.findOneAndUpdate({ user: userId }, { $set: { items: [] } }); // { session }
-
-            
-            // --- Emit Socket.IO event for the new order ---
-           if (createdOrder && createdOrder._id) {
-            // --- Emit Socket.IO event for the new order ---
-                io.emit('newOrderCreated', {
-                orderId: createdOrder._id.toString(), // Now TypeScript knows _id exists
+        // Emit new order created event
+        if (createdOrder && createdOrder._id) {
+            io.emit('newOrderCreated', {
+                orderId: createdOrder._id.toString(),
                 userName: req.user?.name || 'Someone',
-                productName: createdOrder.orderItems[0]?.name,
+                productName: createdOrder.orderItems[0]?.name || 'an item',
                 message: `${req.user?.name || 'A customer'} just placed an order!`
             });
             console.log(`[Socket.IO]: Emitted newOrderCreated for order ${createdOrder._id.toString()}`);
-            } else {
-            console.error("Order was saved but _id is missing, which should not happen.");
-            // Handle this unlikely scenario, perhaps don't emit the event or log a critical error
-            }
-
-            // await session.commitTransaction();
-            // session.endSession();
-
-            res.status(201).json(createdOrder);
-
-        } catch (error) { // Inner try-catch for processing logic
-            // if (session.inTransaction()) {
-            //     await session.abortTransaction();
-            // }
-            // session.endSession();
-            console.error("Error during order creation processing:", error);
-            // Ensure the error is passed to the global error handler to avoid hanging requests
-            return next(error); // Changed from next(error) to return next(error) to ensure no further code exec.
         }
 
-    } catch (error) { // Outer try-catch
+        res.status(201).json(createdOrder);
+
+    } catch (error) {
+        console.error("Error in createOrder handler:", error);
         next(error);
     }
 };
@@ -168,9 +152,12 @@ export const getUserOrders = async (
             res.status(401).json({ message: 'User not authenticated' });
             return;
         }
+        // Consider adding pagination for user orders if a user can have many
+        const orders = await Order.find({ user: userId })
+                                .sort({ createdAt: -1 })
+                                .populate('orderItems.product', 'name imageKeys'); // Populate some product details
 
-        const orders = await Order.find({ user: userId }).sort({ createdAt: -1 });
-        res.json(orders);
+        res.json({ message: 'User orders fetched successfully', data: orders });
     } catch (error) {
         next(error);
     }
@@ -188,91 +175,69 @@ export const getOrderById = async (
             res.status(401).json({ message: 'User not authenticated' });
             return;
         }
-
         const orderId = req.params.id;
         if (!mongoose.Types.ObjectId.isValid(orderId)) {
             res.status(400).json({ message: 'Invalid order ID format.' });
             return;
         }
-
         const order = await Order.findOne({ _id: orderId, user: userId })
-                                 .populate('user', 'name email');
+                                 .populate('user', 'name email') // User who placed order
+                                 .populate('orderItems.product'); // Populate full product details for user's order view
 
         if (!order) {
             res.status(404).json({ message: 'Order not found or you do not have permission to view it.' });
             return;
         }
-        res.json(order);
+        res.json({ message: 'Order details fetched successfully', data: order });
     } catch (error) {
         next(error);
     }
 };
 
-
-// --- Admin Routes ---
-
-// GET /api/v1/admin/orders - Admin gets all orders
-export const getAllOrdersAdmin = async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-): Promise<void> => {
+// PUT /api/v1/orders/:orderId/pay - Mark an order as paid (simulated payment confirmation by user)
+export const markOrderAsPaid = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const orders = await Order.find({})
-                                .populate('user', 'name email') // Populate user details
-                                .sort({ createdAt: -1 });
-        res.json(orders);
-    } catch (error) {
-        next(error);
-    }
-};
+        const { orderId } = req.params;
+        const userId = req.user?._id;
 
-// PUT /api/v1/admin/orders/:id/status - Admin updates order status
-export const updateOrderStatusAdmin = async (
-    req: AuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-): Promise<void> => {
-    try {
-        const orderId = req.params.id;
-        const { orderStatus } = req.body;
-
-        if (!mongoose.Types.ObjectId.isValid(orderId)) {
-            res.status(400).json({ message: 'Invalid order ID format.' });
-            return;
+        if (!userId) {
+            return res.status(401).json({ message: 'User not authenticated.' });
         }
-        const validStatuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
-        if (!orderStatus || !validStatuses.includes(orderStatus)) {
-            res.status(400).json({ message: `Invalid order status. Must be one of: ${validStatuses.join(', ')}` });
-            return;
+        if (!mongoose.Types.ObjectId.isValid(orderId)) {
+            return res.status(400).json({ message: 'Invalid order ID.' });
         }
 
         const order = await Order.findById(orderId);
+
         if (!order) {
-            res.status(404).json({ message: 'Order not found.' });
-            return;
+            return res.status(404).json({ message: 'Order not found.' });
         }
 
-        const previousStatus = order.orderStatus;
-        order.orderStatus = orderStatus as IOrder['orderStatus'];
-
-        if (orderStatus === 'Delivered') {
-            order.isDelivered = true;
-            order.deliveredAt = new Date();
-        } else if (previousStatus === 'Delivered' && orderStatus !== 'Delivered') {
-            // If moving away from Delivered status, reset delivery fields
-            order.isDelivered = false;
-            order.deliveredAt = undefined;
+        // Ensure the user owns this order
+        if (order.user.toString() !== userId.toString()) {
+            return res.status(403).json({ message: 'Not authorized to update this order payment status.' });
         }
 
-        // Future: Emit order status update event via Socket.IO
-        // io.emit('orderStatusUpdate', { orderId: order._id, newStatus: order.orderStatus, userId: order.user });
-        // console.log(`[Socket.IO]: Emitted orderStatusUpdate for order ${order._id} to status ${order.orderStatus}`);
+        // Check if order is already paid or in a non-payable state
+        if (order.status !== 'Pending Payment') {
+            return res.status(400).json({ message: `Order is not pending payment. Current status: ${order.status}` });
+        }
 
+        order.isPaid = true; // Ensure your IOrder interface and OrderSchema have 'isPaid' (boolean)
+        order.paidAt = new Date(); // Ensure your IOrder interface and OrderSchema have 'paidAt' (Date)
+        order.status = 'Processing'; // Update status after successful "payment"
 
-        const updatedOrder = await order.save();
-        res.json(updatedOrder);
+        await order.save();
 
+        // Optional: Emit a Socket.IO event to the user and/or admin
+        if (io) {
+            // You'd need a way to get the user's socket ID if you want to send only to them
+            // For now, just an example log or a general admin event
+            console.log(`Order ${order._id} marked as paid by user ${userId}`);
+            // io.to(userSocketId).emit('orderUpdate', { orderId: order._id, status: order.status, isPaid: true });
+        }
+
+        res.json({ message: 'Order payment confirmed and is now processing.', data: order });
     } catch (error) {
         next(error);
     }
