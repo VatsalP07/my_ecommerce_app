@@ -1,26 +1,28 @@
 // frontend/ts/checkout.ts
-import { API_BASE_URL, getToken, updateCartCount, updateNav, removeToken } from './main.js';
+import { API_BASE_URL, getToken, removeToken, updateNavAndCart } from './main.js';
 
 const orderSummaryItemsDiv = document.getElementById('order-summary-items');
 const summaryTotalPriceSpan = document.getElementById('summary-total-price');
-const confirmOrderPayBtn = document.getElementById('confirm-order-pay-btn'); // Declared globally
+const confirmOrderPayBtn = document.getElementById('confirm-order-pay-btn') as HTMLButtonElement | null;
 const checkoutMessageEl = document.getElementById('checkout-message');
 
-// Shipping Address Inputs
 const addressInput = document.getElementById('address') as HTMLInputElement | null;
 const cityInput = document.getElementById('city') as HTMLInputElement | null;
 const postalCodeInput = document.getElementById('postalCode') as HTMLInputElement | null;
 const countryInput = document.getElementById('country') as HTMLInputElement | null;
 const paymentMethodSelect = document.getElementById('paymentMethod') as HTMLSelectElement | null;
 
-
 async function fetchCartSummaryForCheckout() {
-    if (!orderSummaryItemsDiv || !summaryTotalPriceSpan) return;
+    console.log('[Checkout.ts] fetchCartSummaryForCheckout called');
+    if (!orderSummaryItemsDiv || !summaryTotalPriceSpan) {
+        console.error('[Checkout.ts] Missing summary DOM elements.');
+        return;
+    }
 
     const token = getToken();
     if (!token) {
-        alert('Please login to proceed with checkout.');
-        window.location.href = `/login.html?redirect=/checkout.html`;
+        orderSummaryItemsDiv.innerHTML = '<p>Please <a href="/login.html">login</a> to view your order summary.</p>';
+        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
         return;
     }
 
@@ -30,45 +32,56 @@ async function fetchCartSummaryForCheckout() {
         const response = await fetch(`${API_BASE_URL}/cart`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
+        console.log('[Checkout.ts] Fetch cart summary response status:', response.status);
         if (!response.ok) {
-            if (response.status === 401) { removeToken(); updateNav(); }
+            if (response.status === 401) {
+                removeToken();
+                updateNavAndCart();
+            }
             throw new Error('Failed to fetch cart summary.');
         }
         const cartResult = await response.json();
-        const cartData = cartResult.data; // Assuming /cart endpoint returns { data: cartObject }
+        const cartData = cartResult.data;
+        console.log('[Checkout.ts] Cart summary data:', cartData);
 
         if (!cartData || !cartData.items || cartData.items.length === 0) {
             orderSummaryItemsDiv.innerHTML = '<p>Your cart is empty. <a href="/">Continue shopping</a>.</p>';
             summaryTotalPriceSpan.textContent = '0.00';
-            if (confirmOrderPayBtn) (confirmOrderPayBtn as HTMLButtonElement).disabled = true;
+            if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
             return;
         }
 
         orderSummaryItemsDiv.innerHTML = `
+            <h4>Order Items:</h4>
             <ul>
                 ${cartData.items.map((item: any) => `<li>${item.name || item.product?.name} (x${item.quantity}) - $${(item.price * item.quantity).toFixed(2)}</li>`).join('')}
             </ul>`;
         summaryTotalPriceSpan.textContent = cartData.totalPrice?.toFixed(2) || '0.00';
-        if (confirmOrderPayBtn) (confirmOrderPayBtn as HTMLButtonElement).disabled = false;
+        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = false;
 
     } catch (error: any) {
-        console.error('Error fetching cart summary:', error);
+        console.error('[Checkout.ts] Error fetching cart summary:', error);
         orderSummaryItemsDiv.innerHTML = `<p>Error loading summary: ${error.message}</p>`;
+        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
     }
 }
 
 async function handleConfirmOrderAndPay() {
-    console.log('handleConfirmOrderAndPay FUNCTION EXECUTED'); // For debugging
+    console.log('[Checkout.ts] handleConfirmOrderAndPay function initiated.');
 
     if (!checkoutMessageEl || !addressInput || !cityInput || !postalCodeInput || !countryInput || !paymentMethodSelect) {
-        console.error('One or more checkout DOM elements are missing INSIDE handleConfirmOrderAndPay.');
+        console.error('[Checkout.ts] Critical checkout form DOM elements are missing.');
+        if(checkoutMessageEl) {
+            checkoutMessageEl.style.color = 'red';
+            checkoutMessageEl.textContent = 'Page error: Form elements missing. Please refresh.';
+        }
         return;
     }
 
     const token = getToken();
     if (!token) {
         alert('Authentication session expired. Please login again.');
-        window.location.href = `/login.html?redirect=/checkout.html`;
+        window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
         return;
     }
 
@@ -88,33 +101,56 @@ async function handleConfirmOrderAndPay() {
 
     checkoutMessageEl.style.color = 'blue';
     checkoutMessageEl.textContent = 'Processing order... Please wait.';
-    if (confirmOrderPayBtn) (confirmOrderPayBtn as HTMLButtonElement).disabled = true;
+    if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
 
     let createdOrderData: any = null;
 
     try {
-        // --- Step 0: Fetch current cart items to send to backend ---
+        console.log('[Checkout.ts] Fetching current cart details to build orderItems...');
         const cartResponse = await fetch(`${API_BASE_URL}/cart`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!cartResponse.ok) {
-            const cartError = await cartResponse.json().catch(() => ({ message: 'Failed to fetch cart details for order.' }));
+            const cartError = await cartResponse.json().catch(() => ({ message: 'Failed to fetch current cart details before creating order.' }));
             throw new Error(cartError.message);
         }
         const cartResult = await cartResponse.json();
-        const cartData = cartResult.data; 
+        const cartForOrder = cartResult.data;
 
-        if (!cartData || !cartData.items || cartData.items.length === 0) {
+        if (!cartForOrder || !cartForOrder.items || cartForOrder.items.length === 0) {
             throw new Error('Your cart is empty. Cannot create an order.');
         }
 
-        const clientOrderItems = cartData.items.map((item: any) => ({
-            productId: (item.product as any)?._id || item.product,
-            quantity: item.quantity
-        }));
-        // --- End of Step 0 ---
+        console.log('[Checkout.ts] cartForOrder.items that will be mapped:', JSON.stringify(cartForOrder.items, null, 2));
 
-        // 1. Create Order (now sending clientOrderItems)
+        const orderItemsPayload = cartForOrder.items.map((item: any) => {
+            console.log('[Checkout.ts] Processing cart item for order payload:', JSON.stringify(item, null, 2));
+            const productId = (typeof item.product === 'object' && item.product !== null) ? item.product._id : item.product;
+            console.log(`[Checkout.ts] Derived productId for item "${item.name || 'Unknown Name'}":`, productId);
+
+            if (!productId) {
+                console.error('[Checkout.ts] CRITICAL: productId is undefined for item:', item);
+            }
+
+            return {
+                product: productId,
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                image: item.image
+            };
+        });
+
+        // Check if any productId was undefined during mapping
+        // Add type to 'item' in the callback function for 'some'
+        if (orderItemsPayload.some((item: { product: any }) => item.product === undefined)) { // <<<< CORRECTED THIS LINE
+            console.error('[Checkout.ts] At least one item in orderItemsPayload has an undefined productId. Payload:', JSON.stringify(orderItemsPayload, null, 2));
+            throw new Error('Failed to prepare order items: one or more product IDs are missing.');
+        }
+        console.log('[Checkout.ts] Constructed orderItemsPayload to be sent:', JSON.stringify(orderItemsPayload, null, 2));
+
+
+        console.log('[Checkout.ts] Sending POST /api/v1/orders with orderItems...');
         const orderResponse = await fetch(`${API_BASE_URL}/orders`, {
             method: 'POST',
             headers: {
@@ -122,54 +158,56 @@ async function handleConfirmOrderAndPay() {
                 'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-                orderItems: clientOrderItems, 
+                orderItems: orderItemsPayload,
                 shippingAddress,
                 paymentMethod
             })
         });
-        const orderResult = await orderResponse.json(); 
+        const orderResult = await orderResponse.json();
+        console.log('[Checkout.ts] Create order API response status:', orderResponse.status);
+        console.log('[Checkout.ts] Create order API response data:', orderResult);
 
         if (!orderResponse.ok) {
-            const errorDetail = orderResult.message || (orderResult.errors ? orderResult.errors.join(', ') : 'Failed to create order');
+            const errorDetail = orderResult.message || (orderResult.errors ? JSON.stringify(orderResult.errors) : `Failed to create order (Status: ${orderResponse.status})`);
             throw new Error(errorDetail);
         }
-        
-        createdOrderData = orderResult; 
-        
-        if (!createdOrderData || !createdOrderData._id) { 
-            console.error('Order data from backend is invalid or missing _id after creation!', createdOrderData);
+
+        createdOrderData = orderResult.data;
+
+        if (!createdOrderData || !createdOrderData._id) {
+            console.error('[Checkout.ts] Order data from backend is invalid or missing _id after creation!', createdOrderData);
             throw new Error('Internal error: Failed to process valid order creation response.');
         }
-        
+
         checkoutMessageEl.textContent = `Order #${createdOrderData._id} created. Simulating payment...`;
 
-        // 2. Simulate Payment Delay & Outcome
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 2500));
         const paymentSuccess = Math.random() > 0.05;
 
         if (paymentSuccess) {
             checkoutMessageEl.textContent = 'Payment successful! Updating order status...';
-            // 3. Mark Order as Paid
-            console.log('TOKEN BEING USED FOR /pay ROUTE:', token); // <<< --- ADD THIS LINE
-
+            console.log('[Checkout.ts] TOKEN BEING USED FOR /pay ROUTE:', token ? 'Exists' : 'MISSING!');
             const payResponse = await fetch(`${API_BASE_URL}/orders/${createdOrderData._id}/pay`, {
                 method: 'PUT',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const payResult = await payResponse.json(); 
+            const payResult = await payResponse.json();
+            console.log('[Checkout.ts] Mark as paid API response:', payResult);
+
             if (!payResponse.ok) {
                 throw new Error(payResult.message || 'Failed to update order to paid');
             }
 
             checkoutMessageEl.style.color = 'green';
-            const updatedOrderAfterPayment = payResult.data; // Assuming backend /pay responds with { data: order }
-            
+            const updatedOrderAfterPayment = payResult.data;
+
             if (!updatedOrderAfterPayment || !updatedOrderAfterPayment.status) {
                 throw new Error("Failed to get updated order status after payment.");
             }
 
             checkoutMessageEl.textContent = `Order #${createdOrderData._id} placed and payment successful! Status: ${updatedOrderAfterPayment.status}. You will be redirected shortly.`;
-            updateCartCount();
+
+            updateNavAndCart();
 
             setTimeout(() => {
                 alert(`Thank you for your order! Order ID: ${createdOrderData._id}`);
@@ -179,39 +217,34 @@ async function handleConfirmOrderAndPay() {
         } else {
             checkoutMessageEl.style.color = 'red';
             checkoutMessageEl.textContent = 'Simulated payment failed. Your order has been placed with "Pending Payment" status. Please contact support or try again later.';
-            if (confirmOrderPayBtn) (confirmOrderPayBtn as HTMLButtonElement).disabled = false;
+            alert('Payment simulation failed. Your order was created but payment is pending.');
+            if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = false;
         }
 
     } catch (error: any) {
-        console.error('Checkout process error:', error);
+        console.error('[Checkout.ts] Checkout process error:', error);
         checkoutMessageEl.style.color = 'red';
         checkoutMessageEl.textContent = `Error: ${error.message}`;
-        if (confirmOrderPayBtn) (confirmOrderPayBtn as HTMLButtonElement).disabled = false;
+        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = false;
     }
 }
 
-// Initial Setup on Page Load
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Checkout DOMContentLoaded: Script is running.'); // For debugging
+    console.log('[Checkout.ts] DOMContentLoaded: Script is running.');
 
-    updateNav();
+    updateNavAndCart();
     const token = getToken();
     if (!token) {
-        alert('Please login to proceed with checkout.');
-        window.location.href = `/login.html?redirect=/checkout.html`;
-        return; 
+        console.log('[Checkout.ts] No token on DOMContentLoaded after nav update, redirecting to login.');
+        return;
     }
     fetchCartSummaryForCheckout();
 
-    // --- Corrected Event Listener Attachment ---
-    // confirmOrderPayBtn is already declared as a global const at the top of this file
-    console.log('Checkout DOMContentLoaded: Confirm Order Button Element (confirmOrderPayBtn global):', confirmOrderPayBtn); 
-
-    if (confirmOrderPayBtn) { 
-        console.log('Checkout DOMContentLoaded: Attaching click listener to confirm-order-pay-btn'); 
+    console.log('[Checkout.ts] DOMContentLoaded: Confirm Order Button Element (confirmOrderPayBtn global):', confirmOrderPayBtn);
+    if (confirmOrderPayBtn) {
+        console.log('[Checkout.ts] DOMContentLoaded: Attaching click listener to confirm-order-pay-btn');
         confirmOrderPayBtn.addEventListener('click', handleConfirmOrderAndPay);
     } else {
-        console.error('Checkout DOMContentLoaded: ERROR - Confirm Order & Pay button (confirmOrderPayBtn global) NOT FOUND in DOM!'); 
+        console.error('[Checkout.ts] DOMContentLoaded: ERROR - Confirm Order & Pay button (confirm-order-pay-btn) NOT FOUND in DOM!');
     }
-    // --- End of Correction ---
 });

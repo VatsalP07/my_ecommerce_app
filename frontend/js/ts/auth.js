@@ -1,10 +1,9 @@
 // frontend/ts/auth.ts
-import { API_BASE_URL, setToken } from './main.js'; // .js extension needed for browser ES modules
+import { API_BASE_URL, setToken } from './main.js';
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginErrorEl = document.getElementById('login-error');
 const registerErrorEl = document.getElementById('register-error');
-// frontend/ts/auth.ts
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -22,20 +21,18 @@ if (loginForm) {
                 body: JSON.stringify({ email, password }),
             });
             console.log('[auth.ts - login] API response status:', response.status);
-            console.log('[auth.ts - login] API response ok?:', response.ok);
-            const data = await response.json(); // Try to parse JSON regardless of response.ok for debugging
-            console.log('[auth.ts - login] API response data (parsed JSON):', JSON.stringify(data));
+            const data = await response.json();
+            console.log('[auth.ts - login] API response data:', data);
             if (!response.ok) {
                 console.error('[auth.ts - login] API call not OK. Error data:', data);
                 throw new Error(data.message || `Login failed with status ${response.status}`);
             }
-            console.log('[auth.ts - login] Checking for data.token in response...');
             if (data && data.token && typeof data.token === 'string' && data.token.trim() !== '') {
-                console.log('[auth.ts - login] Token found in response:', data.token);
-                setToken(data.token); // This will trigger console logs from setToken
+                console.log('[auth.ts - login] Token found in response. Calling setToken.');
+                setToken(data.token);
                 alert('Login successful!');
-                console.log('[auth.ts - login] Redirecting to /index.html...');
-                window.location.href = '/index.html'; // Or just '/'
+                console.log('[auth.ts - login] Redirecting to / (homepage)...');
+                window.location.href = '/'; // Homepage DOMContentLoaded will call updateNavAndCart
             }
             else {
                 console.error('[auth.ts - login] Token NOT found or is invalid in response. Data was:', data);
@@ -68,12 +65,12 @@ if (registerForm) {
                 throw new Error(data.message || (data.errors ? data.errors.join(', ') : 'Registration failed'));
             }
             alert('Registration successful! Please login.');
-            window.location.href = '/login.html'; // Redirect to login page
+            window.location.href = '/login.html';
         }
         catch (error) {
             if (registerErrorEl)
                 registerErrorEl.textContent = error.message;
-            console.error('Registration error:', error);
+            console.error('[auth.ts] Registration error:', error);
         }
     });
 }

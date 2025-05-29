@@ -1,161 +1,32 @@
 // frontend/ts/main.ts
-export const API_BASE_URL = 'http://localhost:5001/api/v1'; // Your backend API URL
-// --- Token Management ---
-export function getToken() {
-    // console.log(`[main.ts - getToken] Called on page: ${window.location.pathname}. Attempting to get 'authToken'.`);
-    const token = localStorage.getItem('authToken');
-    // console.log(`[main.ts - getToken] Value from localStorage for 'authToken':`, token);
-    return token; // This should be the RAW token
-}
-export function setToken(receivedTokenValue) {
-    // console.log('[main.ts - setToken] Attempting to set token. Received value:', receivedTokenValue);
-    if (typeof receivedTokenValue === 'string' && receivedTokenValue.trim() !== '') {
-        let tokenToStore = receivedTokenValue;
-        if (receivedTokenValue.toLowerCase().startsWith('bearer ')) {
-            tokenToStore = receivedTokenValue.substring(7).trim();
-            // console.log('[main.ts - setToken] Removed "Bearer " prefix. Storing raw token:', tokenToStore);
-        }
-        if (tokenToStore === '') {
-            // console.error('[main.ts - setToken] Token became empty after stripping "Bearer ", not storing.');
-            return;
-        }
-        try {
-            localStorage.setItem('authToken', tokenToStore);
-            // const storedToken = localStorage.getItem('authToken');
-            // console.log('[main.ts - setToken] Token supposedly SET. Value read back from localStorage:', storedToken);
-            // if (tokenToStore !== storedToken) {
-            //     console.error('[main.ts - setToken] CRITICAL MISMATCH! Token set was different from token read back!');
-            // }
-        }
-        catch (e) {
-            console.error('[main.ts - setToken] Error setting item in localStorage:', e);
-        }
-    }
-    else {
-        console.error('[main.ts - setToken] Invalid token received (empty or not a string). Token was:', receivedTokenValue);
-    }
-}
-export function removeToken() {
-    // console.log(`[main.ts - removeToken] Called on page: ${window.location.pathname}. Removing 'authToken'.`);
-    localStorage.removeItem('authToken');
-}
-// --- Navigation and UI Updates ---
-export function updateNav() {
-    // console.log(`[main.ts - updateNav] Called on page: ${window.location.pathname}.`);
-    const authLinksContainer = document.getElementById('auth-links');
-    const token = getToken();
-    // console.log(`[main.ts - updateNav] Current token from getToken():`, token);
-    if (authLinksContainer) {
-        if (token) {
-            // console.log('[main.ts - updateNav] Token exists. Setting up "Profile/Logout" links.');
-            authLinksContainer.innerHTML = `
-                <a href="#">Profile (TODO)</a>
-                <a href="#" id="logout-link">Logout</a>
-            `;
-            const logoutLink = document.getElementById('logout-link');
-            if (logoutLink) {
-                logoutLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    // console.log('[main.ts - updateNav] Logout link clicked.');
-                    removeToken();
-                    alert('Logged out successfully!');
-                    window.location.href = '/login.html';
-                });
-            }
-        }
-        else {
-            // console.log('[main.ts - updateNav] Token MISSING or empty. Setting up "Login/Register" links.');
-            authLinksContainer.innerHTML = `
-                <a href="/login.html">Login</a>
-                <a href="/register.html">Register</a>
-            `;
-        }
-    }
-    else {
-        // console.warn(`[main.ts - updateNav] auth-links container not found on page: ${window.location.pathname}`);
-    }
-    updateCartCount();
-}
-export async function updateCartCount() {
-    // console.log(`[main.ts - updateCartCount] Called on page: ${window.location.pathname}.`);
-    const cartCountSpan = document.getElementById('cart-count');
-    if (!cartCountSpan) {
-        // console.warn(`[main.ts - updateCartCount] cart-count span not found on page: ${window.location.pathname}`);
-        return;
-    }
-    const rawToken = getToken();
-    // console.log(`[main.ts - updateCartCount] Raw token for cart fetch:`, rawToken);
-    if (!rawToken) {
-        // console.log('[main.ts - updateCartCount] No token, setting cart count to 0.');
-        cartCountSpan.textContent = '0';
-        return;
-    }
-    try {
-        // console.log('[main.ts - updateCartCount] Fetching cart data...');
-        const response = await fetch(`${API_BASE_URL}/cart`, {
-            headers: { 'Authorization': `Bearer ${rawToken}` }
-        });
-        // console.log(`[main.ts - updateCartCount] /cart API response status: ${response.status}`);
-        if (!response.ok) {
-            if (response.status === 401) {
-                // console.error('[main.ts - updateCartCount] /cart API call returned 401 UNAUTHORIZED. Removing token.');
-                removeToken();
-                updateNav();
-            }
-            else {
-                // console.error(`[main.ts - updateCartCount] Failed to fetch cart for count. Status: ${response.status}`);
-            }
-            cartCountSpan.textContent = '0';
-            return;
-        }
-        const cartData = await response.json();
-        // console.log('[main.ts - updateCartCount] Cart data received:', cartData);
-        if (cartData.data && typeof cartData.data.totalQuantity === 'number') {
-            cartCountSpan.textContent = cartData.data.totalQuantity.toString();
-        }
-        else if (cartData.data && Array.isArray(cartData.data.items)) {
-            const quantity = cartData.data.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-            cartCountSpan.textContent = quantity.toString();
-        }
-        else {
-            // console.warn('[main.ts - updateCartCount] Cart data received but format unexpected or items missing. Setting count to 0.');
-            cartCountSpan.textContent = '0';
-        }
-    }
-    catch (error) {
-        // console.error('[main.ts - updateCartCount] Network or other error updating cart count:', error);
-        cartCountSpan.textContent = '0';
-    }
-}
-// --- Socket.IO Client Setup ---
-// @ts-ignore - This tells TypeScript to ignore the 'io is not defined' error for the next line,
-// as 'io' will be globally available from the CDN script.
-const socket = io('http://localhost:5001'); // Your backend Socket.IO server URL
+export const API_BASE_URL = '/api/v1'; // For Nginx proxy
+// @ts-ignore - io is global from CDN
+const socket = io({
+    transports: ['websocket', 'polling']
+});
+console.log('[Frontend]: main.ts loaded. Attempting Socket.IO connection via Nginx...');
 socket.on('connect', () => {
-    console.log(`[Socket.IO Client - main.ts]: Connected to server! Socket ID: ${socket.id} on page: ${window.location.pathname}`);
-    // Example: Send a message to server after connecting (optional)
-    // socket.emit('clientMessage', { message: `Hello from frontend client on ${window.location.pathname}!` });
+    console.log(`%c[Socket.IO Client]: CONNECTED to server! Socket ID: ${socket.id}`, "color: green; font-weight: bold;");
 });
-socket.on('disconnect', () => {
-    console.log(`[Socket.IO Client - main.ts]: Disconnected from server on page: ${window.location.pathname}.`);
+socket.on('disconnect', (reason) => {
+    console.warn(`[Socket.IO Client]: DISCONNECTED from server. Reason: ${reason}. Page: ${window.location.pathname}`);
 });
-// Example: General server message listener (optional)
+socket.on('connect_error', (err) => {
+    console.error(`[Socket.IO Client]: CONNECTION ERROR. Name: ${err.name}, Message: ${err.message}`, err);
+});
 socket.on('serverMessage', (data) => {
-    console.log(`[Socket.IO Client - main.ts]: Message from server:`, data);
+    console.log('[Socket.IO Client]: Received serverMessage:', data.text);
 });
-// Listen for 'newOrderCreated' event (for notifications)
 socket.on('newOrderCreated', (orderData) => {
-    console.log('[Socket.IO Client - main.ts]: Event "newOrderCreated" received!', orderData);
+    console.log('[Socket.IO Client]: New order created event received!', orderData);
     displayTemporaryNotification(orderData.message || `A new order for ${orderData.productName || 'an item'} was just placed!`);
 });
-// Listen for 'stockUpdate' event (this is a global listener)
 socket.on('stockUpdate', (data) => {
-    console.log('[Socket.IO Client - main.ts]: Event "stockUpdate" received:', data);
-    // Dispatch a custom browser event that page-specific scripts can listen to.
-    // This decouples main.ts from needing to know about specific page elements.
+    console.log('[Socket.IO Client]: Stock update event received:', data);
     const event = new CustomEvent('stockUpdatedOnPage', { detail: data });
     document.dispatchEvent(event);
 });
+// Chat MVP Logic
 const chatToggleButton = document.getElementById('chat-toggle-button');
 const chatWidgetContainer = document.getElementById('chat-widget-container');
 const chatMessagesDiv = document.getElementById('chat-messages');
@@ -164,71 +35,70 @@ const chatSendButton = document.getElementById('chat-send-button');
 let chatJoined = false;
 if (chatToggleButton && chatWidgetContainer) {
     chatToggleButton.addEventListener('click', () => {
-        const token = getToken(); // From main.ts
+        const token = getToken();
         if (!token) {
             alert('Please login to use the chat feature.');
-            window.location.href = '/login.html?redirect=' + window.location.pathname;
+            window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
             return;
         }
-        // Toggle chat widget display
-        const isHidden = chatWidgetContainer.style.display === 'none';
+        const isHidden = chatWidgetContainer.style.display === 'none' || chatWidgetContainer.style.display === '';
         chatWidgetContainer.style.display = isHidden ? 'flex' : 'none';
         if (isHidden && !chatJoined) {
-            socket.emit('joinChat'); // Tell backend user has opened chat
+            socket.emit('joinChat');
             chatJoined = true;
+            if (chatMessagesDiv)
+                chatMessagesDiv.innerHTML = '';
+            displayMessageInChat({ sender: 'System', text: 'Connecting to support...' });
         }
     });
 }
-if (chatSendButton && chatInput && chatMessagesDiv) {
-    chatSendButton.addEventListener('click', () => {
+if (chatSendButton && chatInput) {
+    const sendLogic = () => {
         const messageText = chatInput.value.trim();
-        if (messageText) {
+        if (messageText && chatJoined) {
             socket.emit('sendChatMessage', { text: messageText });
-            // displayMessageInChat({ sender: 'You', text: messageText }); // Optimistic update
             chatInput.value = '';
         }
-    });
+        else if (!chatJoined) {
+            displayMessageInChat({ sender: 'System', text: 'Please open chat first.' });
+        }
+    };
+    chatSendButton.addEventListener('click', sendLogic);
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            chatSendButton.click();
+            sendLogic();
         }
     });
 }
 socket.on('chatMessage', (message) => {
-    displayMessageInChat(message);
+    if (chatWidgetContainer && chatWidgetContainer.style.display !== 'none') {
+        displayMessageInChat(message);
+    }
 });
 function displayMessageInChat(message) {
     if (chatMessagesDiv) {
         const messageEl = document.createElement('div');
         messageEl.style.marginBottom = '8px';
-        messageEl.innerHTML = `<strong>${message.sender}:</strong> ${escapeHtml(message.text)}`;
+        messageEl.innerHTML = `<strong>${escapeHtml(message.sender)}:</strong> ${escapeHtml(message.text)}`;
         chatMessagesDiv.appendChild(messageEl);
-        chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight; // Scroll to bottom
+        chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
     }
 }
-// frontend/ts/main.ts (or wherever you placed it)
-function escapeHtml(unsafe) {
-    return unsafe
-        .replace(/&/g, "&") // Replace & with &
-        .replace(/</g, "<") // Replace < with <
-        .replace(/>/g, ">") // Replace > with >
-        .replace(/"/g, "&quot;") // Replace " with &quot;
-        .replace(/'/g, "'"); // Replace ' with ' (or ')
-}
-// Helper function to display a temporary notification
-function displayTemporaryNotification(message, duration = 5000) {
+function displayTemporaryNotification(message, duration = 7000) {
     const notificationArea = document.getElementById('notification-area') || createNotificationArea();
     const notificationDiv = document.createElement('div');
-    notificationDiv.className = 'toast-notification'; // Add a class for styling
-    notificationDiv.textContent = message;
+    notificationDiv.className = 'toast-notification';
+    notificationDiv.textContent = escapeHtml(message);
     notificationArea.appendChild(notificationDiv);
-    console.log(`[Notification - main.ts]: Displaying: "${message}"`);
     setTimeout(() => {
-        notificationDiv.remove();
-        if (notificationArea.childElementCount === 0 && notificationArea.id === 'dynamic-notification-area') {
-            notificationArea.remove(); // Remove container if it was dynamically created and is now empty
-        }
+        notificationDiv.classList.add('fade-out');
+        setTimeout(() => {
+            notificationDiv.remove();
+            if (notificationArea.childElementCount === 0 && notificationArea.id === 'dynamic-notification-area') {
+                notificationArea.remove();
+            }
+        }, 500);
     }, duration);
 }
 function createNotificationArea() {
@@ -239,15 +109,141 @@ function createNotificationArea() {
         area.style.position = 'fixed';
         area.style.bottom = '20px';
         area.style.right = '20px';
-        area.style.zIndex = '1000'; // Ensure it's on top
+        area.style.zIndex = '10000';
         area.style.display = 'flex';
-        area.style.flexDirection = 'column-reverse'; // New notifications appear on top
+        area.style.flexDirection = 'column-reverse';
         document.body.appendChild(area);
     }
     return area;
 }
-// --- Initial Page Load ---
+export function getToken() {
+    const token = localStorage.getItem('authToken');
+    console.log(`[DEBUG Main - getToken] Value from localStorage: ${token ? token.substring(0, 20) + '...' : 'NULL'}`);
+    return token; // This should be the RAW token as it was stored
+}
+export function setToken(receivedTokenValue) {
+    console.log('[DEBUG Main - setToken] Received value (first 20 chars):', receivedTokenValue ? receivedTokenValue.substring(0, 20) : 'EMPTY/NULL');
+    if (typeof receivedTokenValue === 'string' && receivedTokenValue.trim() !== '') {
+        let tokenToStore = receivedTokenValue;
+        // If backend sends "Bearer <token>", strip "Bearer " before storing,
+        // because our fetch calls will add "Bearer " back.
+        if (receivedTokenValue.toLowerCase().startsWith('bearer ')) {
+            tokenToStore = receivedTokenValue.substring(7).trim();
+            console.log('[DEBUG Main - setToken] "Bearer " prefix found and stripped. Storing raw token starting with:', tokenToStore.substring(0, 20));
+        }
+        else {
+            console.log('[DEBUG Main - setToken] No "Bearer " prefix found. Storing token as is, starting with:', tokenToStore.substring(0, 20));
+        }
+        if (tokenToStore === '') {
+            console.error('[DEBUG Main - setToken] Token became empty after potential stripping, NOT storing.');
+            return;
+        }
+        localStorage.setItem('authToken', tokenToStore); // Store only the raw token
+        const stored = localStorage.getItem('authToken');
+        console.log('[DEBUG Main - setToken] Token stored. Value read back starts with:', stored ? stored.substring(0, 20) : 'NULL');
+    }
+    else {
+        console.error('[DEBUG Main - setToken] Attempted to set an invalid or empty token.');
+    }
+}
+export function removeToken() {
+    // Specific context logs will be at call sites
+    localStorage.removeItem('authToken');
+}
+export async function updateCartCount() {
+    const cartCountSpans = document.querySelectorAll('#cart-count');
+    if (cartCountSpans.length === 0)
+        return;
+    const token = getToken();
+    if (!token) {
+        cartCountSpans.forEach(span => span.textContent = '0');
+        return;
+    }
+    console.log('[DEBUG Cart]: updateCartCount() - Attempting to fetch cart. Token present.');
+    try {
+        const response = await fetch(`${API_BASE_URL}/cart`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        console.log('[DEBUG Cart]: Cart fetch response status:', response.status);
+        if (!response.ok) {
+            if (response.status === 401) {
+                console.log('[DEBUG Cart]: Received 401 from /cart. About to call removeToken() from updateCartCount.');
+                removeToken();
+                console.log('[DEBUG Cart]: Token removed by updateCartCount. Calling updateNavUI to refresh UI.');
+                updateNavUI(null);
+            }
+            else {
+                console.error('[DEBUG Cart]: Failed to fetch cart for count, status:', response.status);
+            }
+            cartCountSpans.forEach(span => span.textContent = '0');
+            return;
+        }
+        const cartData = await response.json();
+        const count = cartData.data?.totalQuantity?.toString() || '0';
+        console.log('[DEBUG Cart]: Cart count fetched:', count);
+        cartCountSpans.forEach(span => span.textContent = count);
+    }
+    catch (error) {
+        console.error('[DEBUG Cart]: Error updating cart count:', error);
+        cartCountSpans.forEach(span => span.textContent = '0');
+    }
+}
+function updateNavUI(token) {
+    const authLinksContainer = document.getElementById('auth-links');
+    const authLinksAdminContainer = document.getElementById('auth-links-admin');
+    const loggedInLinksMain = `<a href="#">Profile (TODO)</a> <a href="#" id="logout-link">Logout</a>`;
+    const loggedInLinksAdmin = `<a href="#">Admin Profile (TODO)</a> <a href="#" id="admin-logout-link">Logout</a>`;
+    const loggedOutLinks = `<a href="/login.html">Login</a> <a href="/register.html">Register</a>`;
+    const setupLogoutHandler = (buttonId, redirectPath = '/login.html') => {
+        const logoutLink = document.getElementById(buttonId);
+        if (logoutLink) {
+            const newLogoutLink = logoutLink.cloneNode(true); // Clone to remove old listeners
+            logoutLink.parentNode?.replaceChild(newLogoutLink, logoutLink);
+            newLogoutLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log(`[DEBUG Auth]: Logout clicked (${buttonId}). About to call removeToken().`);
+                removeToken();
+                alert('Logged out successfully!');
+                window.location.href = redirectPath;
+            });
+        }
+    };
+    if (authLinksContainer) {
+        authLinksContainer.innerHTML = token ? loggedInLinksMain : loggedOutLinks;
+        if (token)
+            setupLogoutHandler('logout-link');
+    }
+    if (authLinksAdminContainer) {
+        const adminRedirect = window.location.pathname.startsWith('/admin/') ? '/login.html?redirect=/admin/products.html' : '/login.html';
+        authLinksAdminContainer.innerHTML = token ? loggedInLinksAdmin : loggedOutLinks;
+        if (token)
+            setupLogoutHandler('admin-logout-link', adminRedirect);
+    }
+    console.log('[DEBUG Nav]: Nav UI updated. Token status:', token ? 'Logged In' : 'Logged Out');
+}
+export async function updateNavAndCart() {
+    console.log('[DEBUG Nav]: updateNavAndCart called.');
+    const token = getToken();
+    updateNavUI(token);
+    if (token) {
+        await updateCartCount();
+    }
+    else {
+        const cartCountSpans = document.querySelectorAll('#cart-count');
+        cartCountSpans.forEach(span => span.textContent = '0');
+    }
+}
+export function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string')
+        return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 document.addEventListener('DOMContentLoaded', () => {
-    // console.log(`[main.ts - DOMContentLoaded] Fired on page: ${window.location.pathname}. Calling updateNav.`);
-    updateNav(); // This will also call updateCartCount
+    console.log('[DEBUG Nav]: DOMContentLoaded - calling updateNavAndCart()');
+    updateNavAndCart();
 });
