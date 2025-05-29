@@ -5,7 +5,7 @@ import { authorize } from '../middleware/authorize'; // Your role authorization 
 import {
     createOrder,
     getUserOrders,
-    getOrderById,
+getOrderByIdForUser,
     markOrderAsPaid
 } from '../controllers/orderController';
 
@@ -27,7 +27,7 @@ router.get(
 router.get(
     '/:id',
     passport.authenticate('jwt', { session: false }),
-    getOrderById
+    getOrderByIdForUser
 );
 
 
