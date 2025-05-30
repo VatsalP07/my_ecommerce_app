@@ -29,14 +29,20 @@ export interface IOrder extends Document { // Extend Mongoose Document
         update_time: string;
         email_address: string;
     };
+    stripeCheckoutSessionId?: string; // To store Stripe Checkout Session ID
+    stripePaymentIntentId?: string; // To store Stripe Payment Intent ID if not using Checkout Session directly for fulfillment
+
     itemsPrice: number;  // Sum of (item.price * item.quantity)
     taxPrice: number;
     shippingPrice: number;
     totalPrice: number;
+
     isPaid: boolean;
     paidAt?: Date;       // Optional: timestamp when payment was confirmed
+
     isDelivered: boolean;
     deliveredAt?: Date;  // Optional: timestamp when order was delivered
+
     shippedAt?: Date;    // Timestamp when order was shipped
     status: string;      // Overall status of the order
     createdAt: Date;     // Added by timestamps: true
@@ -76,6 +82,9 @@ const OrderSchema: Schema<IOrder> = new Schema<IOrder>( // Specify IOrder here
             update_time: { type: String },
             email_address: { type: String },
         },
+        stripeCheckoutSessionId: { type: String },
+        stripePaymentIntentId: { type: String },
+        
         itemsPrice: { type: Number, required: true, default: 0.0 },
         taxPrice: { type: Number, required: true, default: 0.0 },
         shippingPrice: { type: Number, required: true, default: 0.0 },

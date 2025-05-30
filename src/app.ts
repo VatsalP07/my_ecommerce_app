@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import http from 'http'; // Import Node.js http module
 import adminRoutes from './routes/adminRoutes';
 import { Server as SocketIOServer, Socket } from 'socket.io'; // Import Socket.IO Server
+import paymentRoutes from './routes/paymentRoutes';
 
 // Configs
 import passportConfig from './config/passport'; // Your Passport configuration
@@ -97,7 +98,7 @@ app.use('/js', express.static(path.join(frontendPath, 'js')));
 app.use('/admin/js', express.static(path.join(frontendPath, 'admin', 'js')));
 // If you have an 'images' folder in 'frontend' for static images (not product images from S3):
 // app.use('/images', express.static(path.join(frontendPath, 'images')));
-
+app.use('/api/v1/payments', paymentRoutes);
 
 // --- API Routes ---
 // These should come AFTER specific static asset serving but BEFORE general static file serving for HTML
