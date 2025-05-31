@@ -91,41 +91,44 @@ export const createStripeCheckoutSession = async (req: AuthenticatedRequest, res
             });
         }
 
+ const frontendBaseUrl = process.env.FRONTEND_URL || 'http://localhost:5001'; // Fallback for safety
+
+        const successUrl = `${frontendBaseUrl}/order-success.html?session_id={CHECKOUT_SESSION_ID}`;
+        const cancelUrl = `${frontendBaseUrl}/order-cancelled.html?order_id=${order._id.toString()}`;
+
+        console.log('[PaymentController] Using Success URL:', successUrl);
+        console.log('[PaymentController] Using Cancel URL:', cancelUrl);
+        // --- END OF CORRECTION ---
+
         // Create a Stripe Checkout Session
         const session = await stripe.checkout.sessions.create({
-            payment_method_types: ['card'], // You can add more payment methods here
+            payment_method_types: ['card'],
             line_items: line_items,
-            mode: 'payment', // For one-time payments
-            customer_email: userEmail, // Pre-fill customer's email on Stripe page
-            // Metadata is crucial for linking the Stripe session back to your order
+            mode: 'payment',
+            customer_email: userEmail,
             metadata: {
-                orderId: order._id.toString(), // Your internal order ID
-                userId: userId.toString(),   // Your internal user ID
+                orderId: order._id.toString(),
+                userId: userId.toString(),
             },
-            // client_reference_id can also be your order ID for easier lookup by some systems
             client_reference_id: order._id.toString(), 
-            // URLs Stripe will redirect to after payment attempt
-            success_url: `${process.env.FRONTEND_URL || 'http://localhost:5001'}/order-success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5001'}/order-cancelled?order_id=${order._id.toString()}`,
+            success_url: successUrl, // Use the corrected variable
+            cancel_url: cancelUrl,   // Use the corrected variable
         });
 
-        // Save Stripe's session ID and payment intent ID (if available) to your order document
+        // ... (save session IDs to order, send response to frontend) ...
         order.stripeCheckoutSessionId = session.id;
         if (session.payment_intent && typeof session.payment_intent === 'string') {
             order.stripePaymentIntentId = session.payment_intent;
         }
         await order.save();
 
-        // Send the session ID back to the frontend
-        // The frontend will use this ID to redirect the user to Stripe's hosted checkout page
         res.json({ sessionId: session.id });
 
     } catch (error) {
         console.error("Stripe Checkout Session creation error:", error);
-        next(error); // Pass to global error handler
+        next(error);
     }
 };
-
 
 // --- 2. Handle Stripe Webhooks ---
 // This endpoint is called by Stripe, not by your frontend or users directly.
