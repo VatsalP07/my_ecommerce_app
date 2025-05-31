@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Successful!</title>
+    <link rel="stylesheet" href="css/style.css"> <!-- Adjust path if needed -->
+</head>
+<body>
+    <nav>
+        <div><a href="/">Home</a></div>
+        <div id="auth-links"></div>
+        <div><a href="/cart.html">Cart (<span id="cart-count">0</span>)</a></div>
+    </nav>
+    <div class="container">
+        <h1>Thank You For Your Order!</h1>
+        <p>Your payment was successful and your order is being processed.</p>
+        <p>A confirmation has been (notionally) sent to your email.</p>
+        <p>Stripe Session ID: <span id="session-id-display">Loading...</span></p>
+        <p><a href="/">Continue Shopping</a></p>
+        <p><a href="/my-orders.html">View Your Orders (TODO)</a></p>
+    </div>
+    <script type="module" src="js/ts/main.js"></script>
+    <script type="module">
+        import { updateNavAndCart } from './js/ts/main.js'; // Adjust path if needed
+        document.addEventListener('DOMContentLoaded', () => {
+            updateNavAndCart();
+            const params = new URLSearchParams(window.location.search);
+            const sessionId = params.get('session_id');
+            const displayEl = document.getElementById('session-id-display');
+            if (displayEl && sessionId) {
+                displayEl.textContent = sessionId;
+            } else if (displayEl) {
+                displayEl.textContent = 'N/A';
+            }
+        });
+    </script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</body>
+</html>
