@@ -6,31 +6,54 @@ const socket = io({
     transports: ['websocket', 'polling']
 });
 
-console.log('[Frontend]: main.ts loaded. Attempting Socket.IO connection via Nginx...');
+console.log('[Frontend]: main.ts loaded. Attempting Socket.IO connection...');
 
 socket.on('connect', () => {
-    console.log(`%c[Socket.IO Client]: CONNECTED to server! Socket ID: ${socket.id}`, "color: green; font-weight: bold;");
+    console.log(`%c[Socket.IO Client]: CONNECTED! Socket ID: ${socket.id}`, "color: green; font-weight: bold;");
 });
 socket.on('disconnect', (reason: string) => {
-    console.warn(`[Socket.IO Client]: DISCONNECTED from server. Reason: ${reason}. Page: ${window.location.pathname}`);
+    console.warn(`[Socket.IO Client]: DISCONNECTED. Reason: ${reason}. Page: ${window.location.pathname}`);
 });
 socket.on('connect_error', (err: Error) => {
     console.error(`[Socket.IO Client]: CONNECTION ERROR. Name: ${err.name}, Message: ${err.message}`, err);
 });
+
+// --- Standard Socket Event Listeners ---
 socket.on('serverMessage', (data: { text: string }) => {
     console.log('[Socket.IO Client]: Received serverMessage:', data.text);
 });
+
 socket.on('newOrderCreated', (orderData: { message: string, productName?: string, orderId?: string }) => {
-    console.log('[Socket.IO Client]: New order created event received!', orderData);
-    displayTemporaryNotification(orderData.message || `A new order for ${orderData.productName || 'an item'} was just placed!`);
+    console.log('[Socket.IO Client]: New order created (pre-payment) event:', orderData);
+    // displayTemporaryNotification(orderData.message || `Order for ${orderData.productName || 'an item'} initiated...`);
 });
+
 socket.on('stockUpdate', (data: { productId: string, newStock: number }) => {
-    console.log('[Socket.IO Client]: Stock update event received:', data);
+    console.log('[Socket.IO Client]: Stock update event:', data);
     const event = new CustomEvent('stockUpdatedOnPage', { detail: data });
     document.dispatchEvent(event);
 });
 
-// Chat MVP Logic
+socket.on('orderPaymentSuccess', (data: { orderId: string, message: string, userId: string }) => {
+    console.log('[Socket.IO Client]: Order Payment Success event:', data);
+    const currentTokenPayload = getTokenPayload();
+    if (currentTokenPayload && currentTokenPayload.sub === data.userId) {
+        displayTemporaryNotification(data.message || `Payment for order ${data.orderId} successful!`);
+        updateCartCount(); // Refresh cart count
+        if (window.location.pathname.includes('/checkout.html') || window.location.pathname.includes('/cart.html')) {
+            const cartItemsContainer = document.getElementById('cart-items-container');
+            if (cartItemsContainer) {
+                cartItemsContainer.innerHTML = `<p>Order #${data.orderId} paid! <a href="/my-orders.html">View Orders (TODO)</a></p>`;
+            }
+            // Clear other checkout form elements if needed
+        }
+    } else {
+        console.log(`[Socket.IO Client]: Order payment success for another user (ID: ${data.userId}).`);
+    }
+});
+
+
+// --- Chat MVP Logic ---
 const chatToggleButton = document.getElementById('chat-toggle-button');
 const chatWidgetContainer = document.getElementById('chat-widget-container');
 const chatMessagesDiv = document.getElementById('chat-messages');
@@ -42,7 +65,7 @@ if (chatToggleButton && chatWidgetContainer) {
     chatToggleButton.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            alert('Please login to use the chat feature.');
+            alert('Please login to use chat.');
             window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
             return;
         }
@@ -52,7 +75,7 @@ if (chatToggleButton && chatWidgetContainer) {
             socket.emit('joinChat');
             chatJoined = true;
             if (chatMessagesDiv) chatMessagesDiv.innerHTML = '';
-            displayMessageInChat({ sender: 'System', text: 'Connecting to support...' });
+            displayMessageInChat({ sender: 'System', text: 'Connecting...' });
         }
     });
 }
@@ -61,9 +84,8 @@ if (chatSendButton && chatInput) {
         const messageText = chatInput.value.trim();
         if (messageText && chatJoined) {
             socket.emit('sendChatMessage', { text: messageText });
+            displayMessageInChat({ sender: 'You', text: messageText }); // Optimistic update
             chatInput.value = '';
-        } else if (!chatJoined) {
-            displayMessageInChat({ sender: 'System', text: 'Please open chat first.'});
         }
     };
     chatSendButton.addEventListener('click', sendLogic);
@@ -72,6 +94,7 @@ if (chatSendButton && chatInput) {
     });
 }
 socket.on('chatMessage', (message: { sender: string, text: string }) => {
+    if (message.sender === 'You' && document.querySelector('#chat-messages div:last-child')?.textContent?.includes(message.text)) return;
     if (chatWidgetContainer && chatWidgetContainer.style.display !== 'none') {
       displayMessageInChat(message);
     }
@@ -80,12 +103,18 @@ function displayMessageInChat(message: { sender: string, text: string }) {
     if (chatMessagesDiv) {
         const messageEl = document.createElement('div');
         messageEl.style.marginBottom = '8px';
-        messageEl.innerHTML = `<strong>${escapeHtml(message.sender)}:</strong> ${escapeHtml(message.text)}`;
+        if (message.sender === 'You') {
+            messageEl.style.textAlign = 'right';
+            messageEl.innerHTML = `${escapeHtml(message.text)} :<strong>ME</strong>`;
+        } else {
+            messageEl.innerHTML = `<strong>${escapeHtml(message.sender)}:</strong> ${escapeHtml(message.text)}`;
+        }
         chatMessagesDiv.appendChild(messageEl);
         chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
     }
 }
 
+// --- UI Helper Functions ---
 function displayTemporaryNotification(message: string, duration: number = 7000) {
     const notificationArea = document.getElementById('notification-area') || createNotificationArea();
     const notificationDiv = document.createElement('div');
@@ -107,46 +136,88 @@ function createNotificationArea(): HTMLElement {
     if (!area) {
         area = document.createElement('div');
         area.id = 'dynamic-notification-area';
-        area.style.position = 'fixed'; area.style.bottom = '20px'; area.style.right = '20px';
-        area.style.zIndex = '10000'; area.style.display = 'flex'; area.style.flexDirection = 'column-reverse';
+        area.style.position = 'fixed'; area.style.bottom = '20px'; area.style.right = '20px'; // Changed to bottom-right
+        area.style.zIndex = '10000'; area.style.display = 'flex'; area.style.flexDirection = 'column-reverse'; // For stacking from bottom
         document.body.appendChild(area);
     }
     return area;
 }
+export function escapeHtml(unsafe: string): string {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
+// --- Auth & Nav Logic ---
 export function getToken(): string | null {
-    const token = localStorage.getItem('authToken');
-    console.log(`[DEBUG Main - getToken] Value from localStorage: ${token ? token.substring(0,20)+'...' : 'NULL'}`);
-    return token; // This should be the RAW token as it was stored
+    return localStorage.getItem('authToken');
 }
 
 export function setToken(receivedTokenValue: string): void {
-    console.log('[DEBUG Main - setToken] Received value (first 20 chars):', receivedTokenValue ? receivedTokenValue.substring(0, 20) : 'EMPTY/NULL');
+    // console.log('[DEBUG Main - setToken] Received value:', receivedTokenValue ? receivedTokenValue.substring(0, 20) : 'EMPTY/NULL');
     if (typeof receivedTokenValue === 'string' && receivedTokenValue.trim() !== '') {
         let tokenToStore = receivedTokenValue;
-        // If backend sends "Bearer <token>", strip "Bearer " before storing,
-        // because our fetch calls will add "Bearer " back.
         if (receivedTokenValue.toLowerCase().startsWith('bearer ')) {
             tokenToStore = receivedTokenValue.substring(7).trim();
-            console.log('[DEBUG Main - setToken] "Bearer " prefix found and stripped. Storing raw token starting with:', tokenToStore.substring(0,20));
-        } else {
-            console.log('[DEBUG Main - setToken] No "Bearer " prefix found. Storing token as is, starting with:', tokenToStore.substring(0,20));
         }
-
-        if (tokenToStore === '') {
-            console.error('[DEBUG Main - setToken] Token became empty after potential stripping, NOT storing.');
-            return;
-        }
-        localStorage.setItem('authToken', tokenToStore); // Store only the raw token
-        const stored = localStorage.getItem('authToken');
-        console.log('[DEBUG Main - setToken] Token stored. Value read back starts with:', stored ? stored.substring(0,20) : 'NULL');
+        if (tokenToStore === '') { return; }
+        localStorage.setItem('authToken', tokenToStore);
     } else {
-        console.error('[DEBUG Main - setToken] Attempted to set an invalid or empty token.');
+        console.error('[DEBUG Main - setToken] Attempted to set invalid token.');
     }
 }
+
 export function removeToken(): void {
-    // Specific context logs will be at call sites
+    console.log('[DEBUG Main - removeToken] Token removed from localStorage.');
     localStorage.removeItem('authToken');
+}
+
+function getTokenPayload(): { sub: string, email: string, roles: string[], [key: string]: any } | null {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        const base64Url = token.split('.')[1];
+        if (!base64Url) throw new Error("Invalid JWT: Missing payload.");
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e: any) {
+        console.error("[DEBUG Main - getTokenPayload] Error decoding token:", e.message);
+        return null;
+    }
+}
+
+function updateNavUI(token: string | null): void {
+    const authLinksContainers = [
+        { id: 'auth-links', loggedInHTML: `<a href="#">Profile (TODO)</a> <a href="#" id="logout-link">Logout</a>`, loggedOutHTML: `<a href="/login.html">Login</a> <a href="/register.html">Register</a>`, logoutButtonId: 'logout-link', defaultRedirect: '/login.html' },
+        { id: 'auth-links-admin', loggedInHTML: `<a href="#">Admin Profile (TODO)</a> <a href="#" id="admin-logout-link">Logout</a>`, loggedOutHTML: `<a href="/login.html">Login</a> <a href="/register.html">Register</a>`, logoutButtonId: 'admin-logout-link', defaultRedirect: '/login.html?redirect=/admin/products.html' }
+    ];
+
+    authLinksContainers.forEach(navConfig => {
+        const container = document.getElementById(navConfig.id);
+        if (container) {
+            container.innerHTML = token ? navConfig.loggedInHTML : navConfig.loggedOutHTML;
+            if (token) {
+                const logoutLink = document.getElementById(navConfig.logoutButtonId) as HTMLAnchorElement | null;
+                if (logoutLink) {
+                    const newLogoutLink = logoutLink.cloneNode(true) as HTMLAnchorElement; // Prevents multiple listeners
+                    logoutLink.parentNode?.replaceChild(newLogoutLink, logoutLink);
+                    newLogoutLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        console.log(`[DEBUG Main]: Logout clicked (${navConfig.logoutButtonId}). Removing token.`);
+                        removeToken();
+                        alert('Logged out successfully!');
+                        updateNavAndCart(); // Update UI immediately
+                        window.location.href = navConfig.defaultRedirect;
+                    });
+                }
+            }
+        }
+    });
+    console.log('[DEBUG Main - updateNavUI]: Nav UI update attempt complete. Token status:', token ? 'Logged In' : 'Logged Out');
 }
 
 export async function updateCartCount(): Promise<void> {
@@ -158,91 +229,40 @@ export async function updateCartCount(): Promise<void> {
         cartCountSpans.forEach(span => span.textContent = '0');
         return;
     }
-    console.log('[DEBUG Cart]: updateCartCount() - Attempting to fetch cart. Token present.');
     try {
         const response = await fetch(`${API_BASE_URL}/cart`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        console.log('[DEBUG Cart]: Cart fetch response status:', response.status);
         if (!response.ok) {
             if (response.status === 401) {
-                console.log('[DEBUG Cart]: Received 401 from /cart. About to call removeToken() from updateCartCount.');
+                console.warn('[DEBUG Main - updateCartCount]: 401 from /cart. Token invalid. Removing token & updating nav.');
                 removeToken();
-                console.log('[DEBUG Cart]: Token removed by updateCartCount. Calling updateNavUI to refresh UI.');
-                updateNavUI(null);
+                updateNavUI(null); // Update nav to logged out state
             } else {
-                console.error('[DEBUG Cart]: Failed to fetch cart for count, status:', response.status);
+                console.error('[DEBUG Main - updateCartCount]: Failed to fetch cart, status:', response.status);
             }
             cartCountSpans.forEach(span => span.textContent = '0');
             return;
         }
         const cartData = await response.json();
         const count = cartData.data?.totalQuantity?.toString() || '0';
-        console.log('[DEBUG Cart]: Cart count fetched:', count);
         cartCountSpans.forEach(span => span.textContent = count);
     } catch (error) {
-        console.error('[DEBUG Cart]: Error updating cart count:', error);
+        console.error('[DEBUG Main - updateCartCount]: Error:', error);
         cartCountSpans.forEach(span => span.textContent = '0');
     }
-}
-
-function updateNavUI(token: string | null): void {
-    const authLinksContainer = document.getElementById('auth-links');
-    const authLinksAdminContainer = document.getElementById('auth-links-admin');
-    const loggedInLinksMain = `<a href="#">Profile (TODO)</a> <a href="#" id="logout-link">Logout</a>`;
-    const loggedInLinksAdmin = `<a href="#">Admin Profile (TODO)</a> <a href="#" id="admin-logout-link">Logout</a>`;
-    const loggedOutLinks = `<a href="/login.html">Login</a> <a href="/register.html">Register</a>`;
-
-    const setupLogoutHandler = (buttonId: string, redirectPath: string = '/login.html') => {
-        const logoutLink = document.getElementById(buttonId) as HTMLAnchorElement | null;
-        if (logoutLink) {
-            const newLogoutLink = logoutLink.cloneNode(true) as HTMLAnchorElement; // Clone to remove old listeners
-            logoutLink.parentNode?.replaceChild(newLogoutLink, logoutLink);
-            newLogoutLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                console.log(`[DEBUG Auth]: Logout clicked (${buttonId}). About to call removeToken().`);
-                removeToken();
-                alert('Logged out successfully!');
-                window.location.href = redirectPath;
-            });
-        }
-    };
-
-    if (authLinksContainer) {
-        authLinksContainer.innerHTML = token ? loggedInLinksMain : loggedOutLinks;
-        if(token) setupLogoutHandler('logout-link');
-    }
-    if (authLinksAdminContainer) {
-        const adminRedirect = window.location.pathname.startsWith('/admin/') ? '/login.html?redirect=/admin/products.html' : '/login.html';
-        authLinksAdminContainer.innerHTML = token ? loggedInLinksAdmin : loggedOutLinks;
-        if(token) setupLogoutHandler('admin-logout-link', adminRedirect);
-    }
-    console.log('[DEBUG Nav]: Nav UI updated. Token status:', token ? 'Logged In' : 'Logged Out');
 }
 
 export async function updateNavAndCart(): Promise<void> {
-    console.log('[DEBUG Nav]: updateNavAndCart called.');
+    console.log('[DEBUG Main - updateNavAndCart]: Called.');
     const token = getToken();
     updateNavUI(token);
-    if (token) {
-        await updateCartCount();
-    } else {
-        const cartCountSpans = document.querySelectorAll('#cart-count');
-        cartCountSpans.forEach(span => span.textContent = '0');
-    }
+    // Cart count should always be updated, even if to 0 when logged out
+    await updateCartCount();
 }
 
-export function escapeHtml(unsafe: string): string {
-    if (typeof unsafe !== 'string') return '';
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('[DEBUG Nav]: DOMContentLoaded - calling updateNavAndCart()');
+    console.log('[DEBUG Main]: DOMContentLoaded - calling initial updateNavAndCart()');
     updateNavAndCart();
 });

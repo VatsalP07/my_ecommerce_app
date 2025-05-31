@@ -7,6 +7,7 @@ import http from 'http'; // Import Node.js http module
 import adminRoutes from './routes/adminRoutes';
 import { Server as SocketIOServer, Socket } from 'socket.io'; // Import Socket.IO Server
 import paymentRoutes from './routes/paymentRoutes';
+import { handleStripeWebhook } from './controllers/paymentController';
 
 // Configs
 import passportConfig from './config/passport'; // Your Passport configuration
@@ -33,7 +34,7 @@ const io = new SocketIOServer(httpServer, {
         methods: ["GET", "POST"],
     }
 });
-
+app.post('/api/v1/stripe/webhook', express.raw({type: 'application/json'}), handleStripeWebhook); // from paymentController
 // --- Core Middleware ---
 app.use(express.json()); // Parse JSON request bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded request bodies

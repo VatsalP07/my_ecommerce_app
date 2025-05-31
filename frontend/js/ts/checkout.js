@@ -1,5 +1,10 @@
 // frontend/ts/checkout.ts
-import { API_BASE_URL, getToken, removeToken, updateNavAndCart } from './main.js';
+import { API_BASE_URL, getToken, removeToken, updateNavAndCart } from './main.js'; // Assuming updateNavAndCart calls updateCartCount
+// --- IMPORTANT: REPLACE WITH YOUR ACTUAL STRIPE TEST PUBLISHABLE KEY ---
+const STRIPE_PUBLISHABLE_KEY_FRONTEND = 'pk_test_51RUNHMCvLwGHDfvAOq3lAcVaxiac204BP7ubkHdq01shCMRam0O2GH9fdoRN6lsc1sDQcFUKsmrDOpO1Yt7GRSGS00cJNYdWmD';
+// --- ---
+// @ts-ignore - Stripe will be loaded from CDN
+const stripe = Stripe(STRIPE_PUBLISHABLE_KEY_FRONTEND);
 const orderSummaryItemsDiv = document.getElementById('order-summary-items');
 const summaryTotalPriceSpan = document.getElementById('summary-total-price');
 const confirmOrderPayBtn = document.getElementById('confirm-order-pay-btn');
@@ -8,7 +13,7 @@ const addressInput = document.getElementById('address');
 const cityInput = document.getElementById('city');
 const postalCodeInput = document.getElementById('postalCode');
 const countryInput = document.getElementById('country');
-const paymentMethodSelect = document.getElementById('paymentMethod');
+// const paymentMethodSelect = document.getElementById('paymentMethod') as HTMLSelectElement | null; // Not directly used if only Stripe
 async function fetchCartSummaryForCheckout() {
     console.log('[Checkout.ts] fetchCartSummaryForCheckout called');
     if (!orderSummaryItemsDiv || !summaryTotalPriceSpan) {
@@ -17,9 +22,7 @@ async function fetchCartSummaryForCheckout() {
     }
     const token = getToken();
     if (!token) {
-        orderSummaryItemsDiv.innerHTML = '<p>Please <a href="/login.html">login</a> to view your order summary.</p>';
-        if (confirmOrderPayBtn)
-            confirmOrderPayBtn.disabled = true;
+        // Redirect handled by DOMContentLoaded check
         return;
     }
     orderSummaryItemsDiv.innerHTML = '<p>Loading cart summary...</p>';
@@ -30,10 +33,13 @@ async function fetchCartSummaryForCheckout() {
         console.log('[Checkout.ts] Fetch cart summary response status:', response.status);
         if (!response.ok) {
             if (response.status === 401) {
-                removeToken();
-                updateNavAndCart();
+                removeToken(); // Token might be invalid
+                alert('Your session has expired. Please log in again.');
+                window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
+                return; // Stop further execution
             }
-            throw new Error('Failed to fetch cart summary.');
+            const errorData = await response.json().catch(() => ({ message: `Failed to fetch cart summary. Status: ${response.status}` }));
+            throw new Error(errorData.message);
         }
         const cartResult = await response.json();
         const cartData = cartResult.data;
@@ -63,7 +69,7 @@ async function fetchCartSummaryForCheckout() {
 }
 async function handleConfirmOrderAndPay() {
     console.log('[Checkout.ts] handleConfirmOrderAndPay function initiated.');
-    if (!checkoutMessageEl || !addressInput || !cityInput || !postalCodeInput || !countryInput || !paymentMethodSelect) {
+    if (!checkoutMessageEl || !addressInput || !cityInput || !postalCodeInput || !countryInput) { // Removed paymentMethodSelect from check
         console.error('[Checkout.ts] Critical checkout form DOM elements are missing.');
         if (checkoutMessageEl) {
             checkoutMessageEl.style.color = 'red';
@@ -83,7 +89,8 @@ async function handleConfirmOrderAndPay() {
         postalCode: postalCodeInput.value.trim(),
         country: countryInput.value.trim(),
     };
-    const paymentMethod = paymentMethodSelect.value;
+    // const paymentMethod = paymentMethodSelect.value; // We'll default to Stripe
+    const paymentMethod = "Stripe"; // Hardcode for now as we are integrating Stripe
     if (!shippingAddress.address || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
         checkoutMessageEl.style.color = 'red';
         checkoutMessageEl.textContent = 'Please fill in all shipping address fields.';
@@ -95,43 +102,10 @@ async function handleConfirmOrderAndPay() {
         confirmOrderPayBtn.disabled = true;
     let createdOrderData = null;
     try {
-        console.log('[Checkout.ts] Fetching current cart details to build orderItems...');
-        const cartResponse = await fetch(`${API_BASE_URL}/cart`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!cartResponse.ok) {
-            const cartError = await cartResponse.json().catch(() => ({ message: 'Failed to fetch current cart details before creating order.' }));
-            throw new Error(cartError.message);
-        }
-        const cartResult = await cartResponse.json();
-        const cartForOrder = cartResult.data;
-        if (!cartForOrder || !cartForOrder.items || cartForOrder.items.length === 0) {
-            throw new Error('Your cart is empty. Cannot create an order.');
-        }
-        console.log('[Checkout.ts] cartForOrder.items that will be mapped:', JSON.stringify(cartForOrder.items, null, 2));
-        const orderItemsPayload = cartForOrder.items.map((item) => {
-            console.log('[Checkout.ts] Processing cart item for order payload:', JSON.stringify(item, null, 2));
-            const productId = (typeof item.product === 'object' && item.product !== null) ? item.product._id : item.product;
-            console.log(`[Checkout.ts] Derived productId for item "${item.name || 'Unknown Name'}":`, productId);
-            if (!productId) {
-                console.error('[Checkout.ts] CRITICAL: productId is undefined for item:', item);
-            }
-            return {
-                product: productId,
-                name: item.name,
-                quantity: item.quantity,
-                price: item.price,
-                image: item.image
-            };
-        });
-        // Check if any productId was undefined during mapping
-        // Add type to 'item' in the callback function for 'some'
-        if (orderItemsPayload.some((item) => item.product === undefined)) { // <<<< CORRECTED THIS LINE
-            console.error('[Checkout.ts] At least one item in orderItemsPayload has an undefined productId. Payload:', JSON.stringify(orderItemsPayload, null, 2));
-            throw new Error('Failed to prepare order items: one or more product IDs are missing.');
-        }
-        console.log('[Checkout.ts] Constructed orderItemsPayload to be sent:', JSON.stringify(orderItemsPayload, null, 2));
-        console.log('[Checkout.ts] Sending POST /api/v1/orders with orderItems...');
+        // Step 1: Create the order in your system with "Awaiting Payment" status
+        // The backend /orders route was updated in Day 14 to NOT expect orderItems in payload if using cart
+        // It will fetch the cart itself using the user's token.
+        console.log('[Checkout.ts] Sending POST /api/v1/orders to create order document...');
         const orderResponse = await fetch(`${API_BASE_URL}/orders`, {
             method: 'POST',
             headers: {
@@ -139,57 +113,52 @@ async function handleConfirmOrderAndPay() {
                 'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-                orderItems: orderItemsPayload,
                 shippingAddress,
-                paymentMethod
+                paymentMethod // This will be "Stripe"
             })
         });
         const orderResult = await orderResponse.json();
         console.log('[Checkout.ts] Create order API response status:', orderResponse.status);
         console.log('[Checkout.ts] Create order API response data:', orderResult);
-        if (!orderResponse.ok) {
+        if (!orderResponse.ok || !orderResult.data || !orderResult.data.orderId) {
             const errorDetail = orderResult.message || (orderResult.errors ? JSON.stringify(orderResult.errors) : `Failed to create order (Status: ${orderResponse.status})`);
             throw new Error(errorDetail);
         }
-        createdOrderData = orderResult.data;
-        if (!createdOrderData || !createdOrderData._id) {
-            console.error('[Checkout.ts] Order data from backend is invalid or missing _id after creation!', createdOrderData);
+        createdOrderData = orderResult.data; // This should contain { orderId: '...', totalPrice: ..., status: '...' }
+        if (!createdOrderData || !createdOrderData.orderId) {
+            console.error('[Checkout.ts] Order data from backend is invalid or missing orderId after creation!', createdOrderData);
             throw new Error('Internal error: Failed to process valid order creation response.');
         }
-        checkoutMessageEl.textContent = `Order #${createdOrderData._id} created. Simulating payment...`;
-        await new Promise(resolve => setTimeout(resolve, 2500));
-        const paymentSuccess = Math.random() > 0.05;
-        if (paymentSuccess) {
-            checkoutMessageEl.textContent = 'Payment successful! Updating order status...';
-            console.log('[Checkout.ts] TOKEN BEING USED FOR /pay ROUTE:', token ? 'Exists' : 'MISSING!');
-            const payResponse = await fetch(`${API_BASE_URL}/orders/${createdOrderData._id}/pay`, {
-                method: 'PUT',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const payResult = await payResponse.json();
-            console.log('[Checkout.ts] Mark as paid API response:', payResult);
-            if (!payResponse.ok) {
-                throw new Error(payResult.message || 'Failed to update order to paid');
-            }
-            checkoutMessageEl.style.color = 'green';
-            const updatedOrderAfterPayment = payResult.data;
-            if (!updatedOrderAfterPayment || !updatedOrderAfterPayment.status) {
-                throw new Error("Failed to get updated order status after payment.");
-            }
-            checkoutMessageEl.textContent = `Order #${createdOrderData._id} placed and payment successful! Status: ${updatedOrderAfterPayment.status}. You will be redirected shortly.`;
-            updateNavAndCart();
-            setTimeout(() => {
-                alert(`Thank you for your order! Order ID: ${createdOrderData._id}`);
-                window.location.href = '/';
-            }, 3000);
+        checkoutMessageEl.textContent = `Order #${createdOrderData.orderId} created. Redirecting to Stripe for payment...`;
+        // Step 2: Create Stripe Checkout Session
+        console.log(`[Checkout.ts] Creating Stripe session for order ID: ${createdOrderData.orderId}`);
+        const stripeSessionResponse = await fetch(`${API_BASE_URL}/payments/create-checkout-session`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ orderId: createdOrderData.orderId }) // Send the orderId created by your backend
+        });
+        const stripeSessionResult = await stripeSessionResponse.json();
+        console.log('[Checkout.ts] Stripe session API response:', stripeSessionResult);
+        if (!stripeSessionResponse.ok || !stripeSessionResult.sessionId) {
+            throw new Error(stripeSessionResult.message || 'Failed to create Stripe payment session.');
         }
-        else {
+        const { sessionId } = stripeSessionResult;
+        // Step 3: Redirect to Stripe Checkout
+        console.log(`[Checkout.ts] Redirecting to Stripe Checkout with session ID: ${sessionId}`);
+        const { error: stripeError } = await stripe.redirectToCheckout({ sessionId });
+        if (stripeError) {
+            console.error('[Checkout.ts] Stripe redirectToCheckout error:', stripeError);
             checkoutMessageEl.style.color = 'red';
-            checkoutMessageEl.textContent = 'Simulated payment failed. Your order has been placed with "Pending Payment" status. Please contact support or try again later.';
-            alert('Payment simulation failed. Your order was created but payment is pending.');
+            checkoutMessageEl.textContent = `Payment Error: ${stripeError.message}`;
+            alert(`Payment Error: ${stripeError.message}`);
             if (confirmOrderPayBtn)
-                confirmOrderPayBtn.disabled = false;
+                confirmOrderPayBtn.disabled = false; // Re-enable button on Stripe client-side error
         }
+        // If redirectToCheckout is successful, the user is navigated away.
+        // If it fails, the error is handled above.
     }
     catch (error) {
         console.error('[Checkout.ts] Checkout process error:', error);
@@ -201,11 +170,13 @@ async function handleConfirmOrderAndPay() {
 }
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[Checkout.ts] DOMContentLoaded: Script is running.');
-    updateNavAndCart();
+    updateNavAndCart(); // Call this to update nav and cart count
     const token = getToken();
     if (!token) {
-        console.log('[Checkout.ts] No token on DOMContentLoaded after nav update, redirecting to login.');
-        return;
+        console.log('[Checkout.ts] No token on DOMContentLoaded, redirecting to login.');
+        alert('Please login to proceed to checkout.');
+        window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
+        return; // Stop further execution if not logged in
     }
     fetchCartSummaryForCheckout();
     console.log('[Checkout.ts] DOMContentLoaded: Confirm Order Button Element (confirmOrderPayBtn global):', confirmOrderPayBtn);
@@ -215,5 +186,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     else {
         console.error('[Checkout.ts] DOMContentLoaded: ERROR - Confirm Order & Pay button (confirm-order-pay-btn) NOT FOUND in DOM!');
+    }
+    // Handle redirection from Stripe
+    const queryParams = new URLSearchParams(window.location.search);
+    const stripeSessionId = queryParams.get('session_id'); // From Stripe success_url
+    const cancelledStripeOrderId = queryParams.get('order_id'); // From Stripe cancel_url (if you passed it)
+    if (stripeSessionId) {
+        if (checkoutMessageEl) {
+            checkoutMessageEl.style.color = 'green';
+            checkoutMessageEl.textContent = 'Payment successful! Thank you for your order. We are processing it. You will be redirected shortly.';
+            console.log("[Checkout.ts] Stripe Checkout Session ID (Success):", stripeSessionId);
+        }
+        updateNavAndCart(); // Update cart (should be empty after webhook processes)
+        // Redirect to a dedicated success page or homepage after a delay
+        setTimeout(() => {
+            // Ideally, fetch the order status here before redirecting to be sure.
+            // For now, redirecting to a generic success page or home.
+            window.location.href = `/order-success.html?session_id=${stripeSessionId}`; // Or just '/'
+        }, 4000);
+    }
+    else if (cancelledStripeOrderId) {
+        if (checkoutMessageEl) {
+            checkoutMessageEl.style.color = 'orange';
+            checkoutMessageEl.textContent = `Your payment was cancelled for order ${cancelledStripeOrderId}. Your order is still pending payment.`;
+            console.log("[Checkout.ts] Payment Cancelled for Order ID:", cancelledStripeOrderId);
+        }
+        // No need to disable button here, user might want to try again or go back to cart
     }
 });
