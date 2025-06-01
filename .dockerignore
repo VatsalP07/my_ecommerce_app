@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Node modules (these will be installed inside the container)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local environment file (this should be injected at runtime, not baked into the image)
+.env
+.env.*
+*.env
+
+
+# Docker files
+Dockerfile
+.dockerignore
+
+
+# IDE and OS specific
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs directory (if you create one locally)
+logs/
+
+# Test files (if any)
+**/*.spec.ts
+**/*.test.ts
