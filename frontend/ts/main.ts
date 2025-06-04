@@ -25,7 +25,6 @@ socket.on('serverMessage', (data: { text: string }) => {
 
 socket.on('newOrderCreated', (orderData: { message: string, productName?: string, orderId?: string }) => {
     console.log('[Socket.IO Client]: New order created (pre-payment) event:', orderData);
-    // displayTemporaryNotification(orderData.message || `Order for ${orderData.productName || 'an item'} initiated...`);
 });
 
 socket.on('stockUpdate', (data: { productId: string, newStock: number }) => {
@@ -39,13 +38,12 @@ socket.on('orderPaymentSuccess', (data: { orderId: string, message: string, user
     const currentTokenPayload = getTokenPayload();
     if (currentTokenPayload && currentTokenPayload.sub === data.userId) {
         displayTemporaryNotification(data.message || `Payment for order ${data.orderId} successful!`);
-        updateCartCount(); // Refresh cart count
+        updateCartCount();
         if (window.location.pathname.includes('/checkout.html') || window.location.pathname.includes('/cart.html')) {
             const cartItemsContainer = document.getElementById('cart-items-container');
             if (cartItemsContainer) {
                 cartItemsContainer.innerHTML = `<p>Order #${data.orderId} paid! <a href="/my-orders.html">View Orders (TODO)</a></p>`;
             }
-            // Clear other checkout form elements if needed
         }
     } else {
         console.log(`[Socket.IO Client]: Order payment success for another user (ID: ${data.userId}).`);
@@ -84,7 +82,7 @@ if (chatSendButton && chatInput) {
         const messageText = chatInput.value.trim();
         if (messageText && chatJoined) {
             socket.emit('sendChatMessage', { text: messageText });
-            displayMessageInChat({ sender: 'You', text: messageText }); // Optimistic update
+            displayMessageInChat({ sender: 'You', text: messageText });
             chatInput.value = '';
         }
     };
@@ -136,8 +134,8 @@ function createNotificationArea(): HTMLElement {
     if (!area) {
         area = document.createElement('div');
         area.id = 'dynamic-notification-area';
-        area.style.position = 'fixed'; area.style.bottom = '20px'; area.style.right = '20px'; // Changed to bottom-right
-        area.style.zIndex = '10000'; area.style.display = 'flex'; area.style.flexDirection = 'column-reverse'; // For stacking from bottom
+        area.style.position = 'fixed'; area.style.bottom = '20px'; area.style.right = '20px';
+        area.style.zIndex = '10000'; area.style.display = 'flex'; area.style.flexDirection = 'column-reverse';
         document.body.appendChild(area);
     }
     return area;
@@ -150,31 +148,24 @@ export function escapeHtml(unsafe: string): string {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
-
 // --- Auth & Nav Logic ---
 export function getToken(): string | null {
     return localStorage.getItem('authToken');
 }
-
 export function setToken(receivedTokenValue: string): void {
-    // console.log('[DEBUG Main - setToken] Received value:', receivedTokenValue ? receivedTokenValue.substring(0, 20) : 'EMPTY/NULL');
     if (typeof receivedTokenValue === 'string' && receivedTokenValue.trim() !== '') {
         let tokenToStore = receivedTokenValue;
         if (receivedTokenValue.toLowerCase().startsWith('bearer ')) {
             tokenToStore = receivedTokenValue.substring(7).trim();
         }
-        if (tokenToStore === '') { return; }
+        if (tokenToStore === '') { console.error('[DEBUG Main - setToken] Token empty after strip.'); return; }
         localStorage.setItem('authToken', tokenToStore);
-    } else {
-        console.error('[DEBUG Main - setToken] Attempted to set invalid token.');
-    }
+    } else { console.error('[DEBUG Main - setToken] Attempted to set invalid token.'); }
 }
-
 export function removeToken(): void {
-    console.log('[DEBUG Main - removeToken] Token removed from localStorage.');
+    console.log('[DEBUG Main - removeToken] Token removed.');
     localStorage.removeItem('authToken');
 }
-
 function getTokenPayload(): { sub: string, email: string, roles: string[], [key: string]: any } | null {
     const token = getToken();
     if (!token) return null;
@@ -184,18 +175,13 @@ function getTokenPayload(): { sub: string, email: string, roles: string[], [key:
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
         return JSON.parse(jsonPayload);
-    } catch (e: any) {
-        console.error("[DEBUG Main - getTokenPayload] Error decoding token:", e.message);
-        return null;
-    }
+    } catch (e: any) { console.error("[DEBUG Main - getTokenPayload] Error decoding token:", e.message); return null; }
 }
-
 function updateNavUI(token: string | null): void {
     const authLinksContainers = [
-        { id: 'auth-links', loggedInHTML: `<a href="#">Profile (TODO)</a> <a href="#" id="logout-link">Logout</a>`, loggedOutHTML: `<a href="/login.html">Login</a> <a href="/register.html">Register</a>`, logoutButtonId: 'logout-link', defaultRedirect: '/login.html' },
-        { id: 'auth-links-admin', loggedInHTML: `<a href="#">Admin Profile (TODO)</a> <a href="#" id="admin-logout-link">Logout</a>`, loggedOutHTML: `<a href="/login.html">Login</a> <a href="/register.html">Register</a>`, logoutButtonId: 'admin-logout-link', defaultRedirect: '/login.html?redirect=/admin/products.html' }
+        { id: 'auth-links', loggedInHTML: `<a href="#" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Profile</a> <a href="#" id="logout-link" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>`, loggedOutHTML: `<a href="/login.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a> <a href="/register.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>`, logoutButtonId: 'logout-link', defaultRedirect: '/login.html' },
+        { id: 'auth-links-admin', loggedInHTML: `<a href="#" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Admin</a> <a href="#" id="admin-logout-link" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>`, loggedOutHTML: `<a href="/login.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a> <a href="/register.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>`, logoutButtonId: 'admin-logout-link', defaultRedirect: '/login.html?redirect=/admin/products.html' }
     ];
-
     authLinksContainers.forEach(navConfig => {
         const container = document.getElementById(navConfig.id);
         if (container) {
@@ -203,64 +189,102 @@ function updateNavUI(token: string | null): void {
             if (token) {
                 const logoutLink = document.getElementById(navConfig.logoutButtonId) as HTMLAnchorElement | null;
                 if (logoutLink) {
-                    const newLogoutLink = logoutLink.cloneNode(true) as HTMLAnchorElement; // Prevents multiple listeners
+                    const newLogoutLink = logoutLink.cloneNode(true) as HTMLAnchorElement;
                     logoutLink.parentNode?.replaceChild(newLogoutLink, logoutLink);
                     newLogoutLink.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        console.log(`[DEBUG Main]: Logout clicked (${navConfig.logoutButtonId}). Removing token.`);
-                        removeToken();
-                        alert('Logged out successfully!');
-                        updateNavAndCart(); // Update UI immediately
-                        window.location.href = navConfig.defaultRedirect;
+                        e.preventDefault(); removeToken(); alert('Logged out!'); updateNavAndCart(); window.location.href = navConfig.defaultRedirect;
                     });
                 }
             }
         }
     });
-    console.log('[DEBUG Main - updateNavUI]: Nav UI update attempt complete. Token status:', token ? 'Logged In' : 'Logged Out');
+    console.log('[DEBUG Main - updateNavUI]: Nav UI update complete. Token:', token ? 'Present' : 'Absent');
 }
-
 export async function updateCartCount(): Promise<void> {
     const cartCountSpans = document.querySelectorAll('#cart-count');
     if (cartCountSpans.length === 0) return;
-
     const token = getToken();
-    if (!token) {
-        cartCountSpans.forEach(span => span.textContent = '0');
-        return;
-    }
+    if (!token) { cartCountSpans.forEach(span => span.textContent = '0'); return; }
     try {
-        const response = await fetch(`${API_BASE_URL}/cart`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await fetch(`${API_BASE_URL}/cart`, { headers: { 'Authorization': `Bearer ${token}` } });
         if (!response.ok) {
-            if (response.status === 401) {
-                console.warn('[DEBUG Main - updateCartCount]: 401 from /cart. Token invalid. Removing token & updating nav.');
-                removeToken();
-                updateNavUI(null); // Update nav to logged out state
-            } else {
-                console.error('[DEBUG Main - updateCartCount]: Failed to fetch cart, status:', response.status);
-            }
-            cartCountSpans.forEach(span => span.textContent = '0');
-            return;
+            if (response.status === 401) { console.warn('[DEBUG CartCount]: 401 from /cart.'); removeToken(); updateNavUI(null); }
+            else { console.error('[DEBUG CartCount]: Failed status:', response.status); }
+            cartCountSpans.forEach(span => span.textContent = '0'); return;
         }
         const cartData = await response.json();
         const count = cartData.data?.totalQuantity?.toString() || '0';
         cartCountSpans.forEach(span => span.textContent = count);
-    } catch (error) {
-        console.error('[DEBUG Main - updateCartCount]: Error:', error);
-        cartCountSpans.forEach(span => span.textContent = '0');
-    }
+    } catch (error) { console.error('[DEBUG CartCount]: Error:', error); cartCountSpans.forEach(span => span.textContent = '0'); }
 }
-
 export async function updateNavAndCart(): Promise<void> {
     console.log('[DEBUG Main - updateNavAndCart]: Called.');
     const token = getToken();
     updateNavUI(token);
-    // Cart count should always be updated, even if to 0 when logged out
     await updateCartCount();
 }
 
+// --- CATEGORIES DROPDOWN LOGIC ---
+const categoriesBtn = document.getElementById('categories-btn');
+const categoriesDropdown = document.getElementById('categories-dropdown');
+if (categoriesBtn && categoriesDropdown) {
+    categoriesBtn.addEventListener('click', (event) => {
+        event.stopPropagation(); categoriesDropdown.classList.toggle('hidden');
+        categoriesBtn.setAttribute('aria-expanded', categoriesDropdown.classList.contains('hidden') ? 'false' : 'true');
+    });
+    document.addEventListener('click', (event) => {
+        if (!categoriesDropdown.classList.contains('hidden') && !categoriesBtn.contains(event.target as Node) && !categoriesDropdown.contains(event.target as Node)) {
+            categoriesDropdown.classList.add('hidden'); categoriesBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !categoriesDropdown.classList.contains('hidden')) {
+            categoriesDropdown.classList.add('hidden'); categoriesBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
+}
+
+// ************************************************************************** //
+// **NEWLY ADDED FOR NAVIGATION SEARCH BAR (DAY 19 UI ENHANCEMENTS)**      //
+// ************************************************************************** //
+const navSearchInput = document.getElementById('nav-search-input') as HTMLInputElement | null;
+const navSearchButton = document.getElementById('nav-search-btn') as HTMLButtonElement | null;
+
+function handleNavSearch() {
+    if (navSearchInput) {
+        const searchTerm = navSearchInput.value.trim();
+        if (searchTerm) {
+            console.log(`[Main.ts - NavSearch] Search initiated for: "${searchTerm}"`);
+            // Redirect to the homepage (product list page) with the search query parameter.
+            // The productList.ts script will detect this parameter and fetch search results.
+            window.location.href = `/?search=${encodeURIComponent(searchTerm)}`;
+        } else {
+            // If search input is empty, you could simply redirect to homepage without search,
+            // or do nothing if already on homepage. For now, let's just log it.
+            console.log('[Main.ts - NavSearch] Search term is empty, no action taken.');
+            // window.location.href = `/`; // Optional: redirect to clean homepage
+        }
+    }
+}
+
+if (navSearchButton) {
+    navSearchButton.addEventListener('click', (e) => {
+        e.preventDefault(); // Important if the button is of type="submit" inside a form
+        handleNavSearch();
+    });
+}
+
+if (navSearchInput) {
+    navSearchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent default form submission if inside a form
+            handleNavSearch();
+        }
+    });
+}
+// ************************************************************************** //
+// **END OF NAVIGATION SEARCH BAR SECTION**                                //
+// ************************************************************************** //
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[DEBUG Main]: DOMContentLoaded - calling initial updateNavAndCart()');

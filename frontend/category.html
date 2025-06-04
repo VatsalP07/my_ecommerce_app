@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Shopping Cart - MyStore</title>
+    <title>Category Products - MyStore</title> <!-- Title will be updated by JS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- <link rel="stylesheet" href="css/style.css"> Commented out or removed -->
+    <!-- <link rel="stylesheet" href="css/style.css"> -->
 </head>
 <body class="bg-gray-100 text-gray-700 font-sans antialiased leading-normal tracking-normal">
 
-    <!-- Navigation Bar (Assumed to be the updated one from previous steps) -->
+    <!-- Navigation Bar (Updated Version) -->
     <nav class="bg-gray-800 text-white p-4 shadow-md sticky top-0 z-50">
+        <!-- ... PASTE YOUR COMPLETE UPDATED NAV HTML HERE ... -->
+        <!-- (The same nav from index.html) -->
         <div class="container mx-auto flex flex-wrap justify-between items-center max-w-7xl">
             <a href="/" class="text-2xl font-bold hover:text-blue-300 transition-colors duration-200 mr-6">MyStore</a>
             <div class="w-full md:w-1/2 lg:w-1/3 order-3 md:order-2 mt-3 md:mt-0 relative">
@@ -24,14 +26,13 @@
                 <div id="auth-links" class="flex space-x-4"></div>
                 <div class="relative" id="categories-menu-container">
                     <button id="categories-btn" type="button" class="inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-gray-300 hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white transition-colors duration-200">
-                        Categories
-                        <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        Categories <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                     </button>
                     <div id="categories-dropdown" class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-30" role="menu">
                         <div class="py-1" role="none">
                             <a href="/category.html?name=electronics" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Electronics</a>
-                            <a href="/category.html?name=kitchen" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Kitchen</a>
-                            <a href="/category.html?name=food" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Food</a>
+                            <a href="/category.html?name=kitchen" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Kitchen Appliances</a>
+                            <a href="/category.html?name=food" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Food Items</a>
                             <a href="/category.html?name=books" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Books</a>
                             <a href="/category.html?name=games" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Games</a>
                         </div>
@@ -46,29 +47,34 @@
         </div>
     </nav>
 
-    <div class="container mx-auto mt-8 mb-8 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl bg-white shadow-xl rounded-lg">
-        <div class="flex flex-col lg:flex-row lg:gap-8">
-            <!-- Cart Items Section -->
-            <div class="lg:w-2/3">
-                <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 border-b pb-4">Your Shopping Cart</h1>
-                <div id="cart-items-container">
-                    <!-- Cart items will be loaded here by JS. -->
-                    <p class="text-center text-gray-500 py-10">Loading your cart...</p> 
-                </div>
+    <!-- Category Products Section -->
+    <section id="category-products-section" class="py-12 sm:py-16 lg:py-20">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
+            <div class="text-left mb-10 sm:mb-12 border-b pb-4">
+                <a href="/" class="text-sm text-indigo-600 hover:text-indigo-800">← Back to All Products</a>
+                <h1 id="category-page-title" class="text-3xl sm:text-4xl font-bold text-gray-900 mt-2">
+                    Category: <span id="category-name-placeholder" class="text-indigo-700">Loading...</span>
+                </h1>
             </div>
-
-            <!-- Cart Summary Section -->
-            <div id="cart-summary-section" class="lg:w-1/3 mt-8 lg:mt-0 lg:sticky lg:top-28"> 
-                <!-- Summary will be populated by JS if cart has items -->
-                 <div class="bg-gray-50 p-6 rounded-lg shadow-md">
-                    <h2 class="text-xl font-semibold text-gray-800 border-b pb-3 mb-4">Cart Summary</h2>
-                    <p class="text-center text-gray-500 py-4">Your cart details will appear here.</p>
-                </div>
+            <!-- Product list with Tailwind grid classes -->
+            <div id="category-product-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 md:gap-8">
+                <!-- Products will be loaded here by JS -->
+                <p class="col-span-full text-center text-gray-500 py-10">Loading products for this category...</p>
+            </div>
+            <div id="category-pagination-controls" class="mt-10 text-center">
+                <!-- Pagination buttons will be here -->
             </div>
         </div>
-    </div>
+    </section>
     
-    <!-- Chat Widget & Notification Area -->
+    <!-- Footer Example -->
+    <footer class="bg-gray-800 text-gray-300 py-12 text-center mt-10">
+        <div class="container mx-auto">
+            <p>© <span id="current-year"></span> MyStore. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Chat Widget HTML (same as other pages) -->
     <button id="chat-toggle-button" style="position: fixed; bottom: 20px; right: 20px; z-index: 1001;" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-full shadow-xl transform hover:scale-110 transition-transform">
         <svg class="w-6 h-6 inline-block mr-1 -mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 5.523-4.477 10-10 10S1 17.523 1 12S5.477 2 11 2s10 4.477 10 10z"></path></svg>
         Chat
@@ -81,10 +87,18 @@
             <button id="chat-send-button" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-r-lg font-semibold text-sm">Send</button>
         </div>
     </div>
-
+    
     <!-- Scripts -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script type="module" src="js/ts/main.js"></script>
-    <script type="module" src="js/ts/cart.js"></script>
+    <script type="module" src="js/ts/categoryPage.js"></script> <!-- New JS file for this page -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const yearSpan = document.getElementById('current-year');
+        if (yearSpan) {
+            yearSpan.textContent = new Date().getFullYear().toString();
+        }
+    });
+</script>
 </body>
 </html>

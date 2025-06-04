@@ -3,70 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <script src="https://js.stripe.com/v3/"></script>
-    <title>Checkout</title>
-    <link rel="stylesheet" href="css/style.css">
-    <style>
-        .checkout-summary { margin-bottom: 20px; border: 1px solid #eee; padding: 15px; }
-        .checkout-summary h3 { margin-top: 0; }
-        .form-section { margin-bottom: 20px; }
-    </style>
+    <title>Checkout - MyStore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://js.stripe.com/v3/"></script> <!-- Stripe.js needed here -->
+    <!-- <link rel="stylesheet" href="css/style.css"> -->
 </head>
-<body>
-    <nav>
-        <div><a href="/">Home</a></div>
-        <div id="auth-links"></div>
-        <div><a href="/cart.html">Cart (<span id="cart-count">0</span>)</a></div>
+<body class="bg-gray-100 text-gray-700 font-sans antialiased leading-normal tracking-normal">
+
+    <!-- Navigation Bar (Assumed to be your updated version) -->
+    <nav class="bg-gray-800 text-white p-4 shadow-md sticky top-0 z-50">
+        <div class="container mx-auto flex flex-wrap justify-between items-center max-w-7xl">
+            <a href="/" class="text-2xl font-bold hover:text-blue-300 transition-colors duration-200 mr-6">MyStore</a>
+            <div class="w-full md:w-1/2 lg:w-1/3 order-3 md:order-2 mt-3 md:mt-0 relative">
+                <input type="search" id="nav-search-input" name="search" placeholder="Search products..." 
+                       class="bg-gray-700 text-white placeholder-gray-400 h-10 px-5 pr-10 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full appearance-none">
+                <button type="submit" id="nav-search-btn" aria-label="Search" class="absolute right-0 top-0 mt-3 mr-4 text-gray-400 hover:text-white">
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+            <div class="order-2 md:order-3 flex items-center space-x-4 md:space-x-6">
+                <div id="auth-links" class="flex space-x-4"></div>
+                <div class="relative" id="categories-menu-container">
+                    <button id="categories-btn" type="button" class="inline-flex items-center justify-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-gray-300 hover:bg-gray-700 hover:text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white transition-colors duration-200">
+                        Categories <svg class="-mr-1 ml-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                    </button>
+                    <div id="categories-dropdown" class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-30" role="menu">
+                        <div class="py-1" role="none">
+                            <a href="/category.html?name=electronics" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Electronics</a>
+                            <a href="/category.html?name=kitchen" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Kitchen</a>
+                            <a href="/category.html?name=food" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Food</a>
+                            <a href="/category.html?name=books" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Books</a>
+                            <a href="/category.html?name=games" class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100 hover:text-gray-900" role="menuitem">Games</a>
+                        </div>
+                    </div>
+                </div>
+                <a href="/cart.html" class="relative text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                    <span id="cart-count" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">0</span>
+                    <span class="sr-only">View Cart</span>
+                </a>
+            </div>
+        </div>
     </nav>
 
-    <div class="container">
-        <h1>Checkout</h1>
+    <div class="container mx-auto mt-8 mb-8 px-4 sm:px-6 lg:px-8 py-8 max-w-4xl bg-white shadow-xl rounded-lg">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 mb-8 border-b pb-4">Secure Checkout</h1>
 
-        <div id="checkout-content">
-            <div class="checkout-summary">
-                <h3>Order Summary</h3>
-                <div id="order-summary-items">
-                    <p>Loading summary...</p>
-                </div>
-                <p><strong>Total Price: $<span id="summary-total-price">0.00</span></strong></p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
+            <!-- Shipping Address Form & Payment -->
+            <div class="md:col-span-2">
+                <section id="shipping-address-section" class="mb-8">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4">Shipping Address</h2>
+                    <form id="shipping-address-form" class="space-y-4">
+                        <div>
+                            <label for="shipping-name" class="block text-sm font-medium text-gray-700">Full Name</label>
+                            <input type="text" id="shipping-name" name="fullName" autocomplete="name" required
+                                   class="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="Test Customer">
+                        </div>
+                        <div>
+                            <label for="shipping-address" class="block text-sm font-medium text-gray-700">Street Address</label>
+                            <input type="text" id="address" name="address" autocomplete="street-address" required
+                                   class="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="123 Payment Lane">
+                        </div>
+                        <div>
+                            <label for="shipping-city" class="block text-sm font-medium text-gray-700">City</label>
+                            <input type="text" id="city" name="city" autocomplete="address-level2" required
+                                   class="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="Checkoutville">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="shipping-postal" class="block text-sm font-medium text-gray-700">Postal Code</label>
+                                <input type="text" id="postalCode" name="postalCode" autocomplete="postal-code" required
+                                       class="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="P4Y M3N7">
+                            </div>
+                            <div>
+                                <label for="shipping-country" class="block text-sm font-medium text-gray-700">Country</label>
+                                <input type="text" id="country" name="country" autocomplete="country-name" required
+                                       class="mt-1 block w-full px-3 py-2.5 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" value="Webland">
+                            </div>
+                        </div>
+                    </form>
+                </section>
+                
+                <!-- Payment Method Section (Stripe will handle the actual form) -->
+                <section id="payment-method-section">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-4 pt-4 border-t">Payment Details</h2>
+                    <p class="text-sm text-gray-600 mb-4">You will be redirected to our secure payment partner Stripe to complete your purchase.</p>
+                     <div id="checkout-message" class="text-sm text-gray-600 my-4 p-3 rounded-md bg-blue-50 border border-blue-200 hidden"></div> <!-- For messages -->
+                    <button id="confirm-order-pay-btn" type="button"
+                            class="w-full flex items-center justify-center rounded-md border border-transparent bg-indigo-600 px-6 py-3.5 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50">
+                        Confirm Order & Proceed to Payment
+                    </button>
+                </section>
             </div>
 
-            <div class="form-section" id="shipping-address-form">
-                <h3>Shipping Address (Simplified)</h3>
-                <div class="form-group">
-                    <label for="address">Address:</label>
-                    <input type="text" id="address" name="address" value="123 Default St" required>
+            <!-- Order Summary -->
+            <div id="order-summary-checkout" class="md:col-span-1 bg-gray-50 p-6 rounded-lg shadow-md h-fit md:sticky md:top-28">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4 border-b pb-3">Your Order</h2>
+                <div id="order-summary-items" class="space-y-3 max-h-60 overflow-y-auto mb-4 pr-2">
+                    <p class="text-gray-500 text-sm">Loading summary...</p>
                 </div>
-                <div class="form-group">
-                    <label for="city">City:</label>
-                    <input type="text" id="city" name="city" value="Defaultville" required>
-                </div>
-                <div class="form-group">
-                    <label for="postalCode">Postal Code:</label>
-                    <input type="text" id="postalCode" name="postalCode" value="D0F0L0" required>
-                </div>
-                 <div class="form-group">
-                    <label for="country">Country:</label>
-                    <input type="text" id="country" name="country" value="Defaultland" required>
-                </div>
+                <dl class="space-y-2 text-sm border-t pt-4">
+                    <div class="flex justify-between">
+                        <dt class="text-gray-600">Subtotal</dt>
+                        <dd id="summary-subtotal" class="font-medium text-gray-900">$0.00</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-gray-600">Shipping (Est.)</dt>
+                        <dd id="summary-shipping" class="font-medium text-gray-900">$0.00</dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt class="text-gray-600">Tax (Est.)</dt>
+                        <dd id="summary-tax" class="font-medium text-gray-900">$0.00</dd>
+                    </div>
+                    <div class="flex justify-between font-bold text-lg text-gray-900 border-t pt-3 mt-2">
+                        <dt>Total</dt>
+                        <dd id="summary-total-price" class="text-indigo-600">$0.00</dd>
+                    </div>
+                </dl>
             </div>
-
-            <div class="form-section" id="payment-method-selection">
-                <h3>Payment Method (Simulated)</h3>
-                <select id="paymentMethod" name="paymentMethod">
-                    <option value="SimulatedCard">Simulated Credit Card</option>
-                    <option value="SimulatedPayPal">Simulated PayPal</option>
-                </select>
-            </div>
-
-            <button id="confirm-order-pay-btn">Confirm Order & Pay (Simulated)</button>
-            <p id="checkout-message" style="margin-top: 15px;"></p>
+        </div>
+    </div>
+    
+    <!-- Chat Widget & Scripts -->
+    <!-- ... your existing chat widget HTML ... -->
+    <button id="chat-toggle-button" style="position: fixed; bottom: 20px; right: 20px; z-index: 1001;" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-full shadow-xl transform hover:scale-110 transition-transform">
+        <svg class="w-6 h-6 inline-block mr-1 -mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 5.523-4.477 10-10 10S1 17.523 1 12S5.477 2 11 2s10 4.477 10 10z"></path></svg>
+        Chat
+    </button>
+     <div id="chat-widget-container" style="display: none; position: fixed; bottom: 85px; right: 20px; width: 350px; height: 480px; z-index: 1000; flex-direction: column;" class="bg-white rounded-xl shadow-2xl overflow-hidden">
+        <div class="bg-gray-700 text-white p-4 rounded-t-xl text-lg font-semibold text-center">Customer Support</div>
+        <div id="chat-messages" style="flex-grow: 1; padding: 15px; overflow-y: auto; background-color: #f9fafb;"></div>
+        <div style="padding: 10px; display: flex; border-top: 1px solid #e5e7eb; background-color: #f3f4f6;">
+            <input type="text" id="chat-input" placeholder="Type your message..." class="flex-grow p-3 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm">
+            <button id="chat-send-button" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-r-lg font-semibold text-sm">Send</button>
         </div>
     </div>
 
-    <!-- Corrected script paths -->
-     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script type="module" src="js/ts/main.js"></script>
-    <script type="module" src="js/ts/checkout.js"></script>
+    <script type="module" src="js/ts/checkout.js"></script> 
 </body>
 </html>

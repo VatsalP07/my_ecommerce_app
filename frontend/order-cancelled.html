@@ -3,37 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Cancelled</title>
-    <link rel="stylesheet" href="css/style.css"> <!-- Adjust path if needed -->
+    <title>Order Cancelled - MyStore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- <link rel="stylesheet" href="css/style.css"> -->
 </head>
-<body>
-    <nav>
-        <div><a href="/">Home</a></div>
-        <div id="auth-links"></div>
-        <div><a href="/cart.html">Cart (<span id="cart-count">0</span>)</a></div>
+<body class="bg-gray-100 text-gray-700 font-sans antialiased leading-normal tracking-normal">
+
+    <nav class="bg-gray-800 text-white p-4 shadow-md sticky top-0 z-50">
+        <div class="container mx-auto flex flex-wrap justify-between items-center max-w-7xl">
+            <a href="/" class="text-2xl font-bold hover:text-blue-300 transition-colors duration-200 mr-6">MyStore</a>
+             <!-- Nav content -->
+             <div id="auth-links" class="flex space-x-4"></div>
+             <div><a href="/cart.html" class="relative text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"><span id="cart-count" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">0</span>Cart</a></div>
+        </div>
     </nav>
-    <div class="container">
-        <h1>Payment Cancelled</h1>
-        <p>Your payment process was cancelled. Your order items are still in your cart (or order history if created).</p>
-        <p>Order ID (if created): <span id="order-id-display"></span></p>
-        <p><a href="/cart.html">Return to Cart</a></p>
-        <p><a href="/">Continue Shopping</a></p>
-    </div>
+
+    <main class="min-h-[calc(100vh-150px)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full bg-white p-8 sm:p-10 rounded-xl shadow-2xl text-center">
+            <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-6">
+                <svg class="h-10 w-10 text-yellow-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+            </div>
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">Payment Cancelled or Incomplete</h1>
+            <p class="text-lg text-gray-600 mb-8">
+                Your payment process was not completed. Your order has not been placed successfully.
+            </p>
+            <p class="text-sm text-gray-500 mb-6 bg-gray-50 p-3 rounded-md">
+                Order ID (if initiated): <span id="order-id-display" class="font-medium text-gray-800">Loading...</span>
+            </p>
+            <div class="mt-8 space-y-3">
+                <a href="/cart.html" 
+                   class="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Return to Cart to Try Again
+                </a>
+                <a href="/" 
+                   class="w-full inline-flex justify-center items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Continue Shopping
+                </a>
+            </div>
+        </div>
+    </main>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
     <script type="module" src="js/ts/main.js"></script>
     <script type="module">
-        import { updateNavAndCart } from './js/ts/main.js'; // Adjust path if needed
+        import { updateNavAndCart, escapeHtml } from './js/ts/main.js'; // Ensure correct path
         document.addEventListener('DOMContentLoaded', () => {
             updateNavAndCart();
             const params = new URLSearchParams(window.location.search);
             const orderId = params.get('order_id');
             const displayEl = document.getElementById('order-id-display');
             if (displayEl && orderId) {
-                displayEl.textContent = orderId;
-            } else if(displayEl) {
-                displayEl.textContent = 'N/A';
+                displayEl.textContent = escapeHtml(orderId);
+            } else if (displayEl) {
+                displayEl.textContent = 'N/A (Order not fully initiated)';
             }
         });
     </script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </body>
 </html>

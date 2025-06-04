@@ -280,11 +280,25 @@ export const getAllProducts: RequestHandler = async (req: Request, res: Response
     // ... (no changes to getAllProducts needed for this specific request) ...
     // (Keep your existing implementation)
     try {
-        const page = parseInt(req.query.page as string) || 1;
-        const limit = parseInt(req.query.limit as string) || 10;
-        const skip = (page - 1) * limit;
-        const queryConditions = {};
+        const pageQuery = req.query.page as string;
+        const limitQuery = req.query.limit as string;
+        const categoryQuery = req.query.category as string; // Get category from query
 
+        const page = parseInt(pageQuery) || 1;
+        const limit = parseInt(limitQuery) || 10;
+        const skip = (page - 1) * limit;
+
+        const queryConditions: any = {}; 
+
+        if (categoryQuery) {
+            // Case-insensitive match for the category name
+            // Using a regex for a partial match at the beginning of the string, case-insensitive.
+            // If you want an exact match (still case-insensitive), use:
+            // queryConditions.category = { $regex: new RegExp(`^${categoryQuery}$`, 'i') };
+            queryConditions.category = { $regex: categoryQuery, $options: 'i' };
+            console.log(`[ProductController] Filtering by category: ${categoryQuery}`);
+        }
+        
         const products = await Product.find(queryConditions)
             .populate('sellerId', 'name')
             .sort({ createdAt: -1 })

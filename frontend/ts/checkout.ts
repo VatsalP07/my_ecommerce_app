@@ -1,38 +1,48 @@
 // frontend/ts/checkout.ts
-import { API_BASE_URL, getToken, removeToken, updateNavAndCart, updateCartCount } from './main.js'; // Assuming updateNavAndCart calls updateCartCount
+import { API_BASE_URL, getToken, removeToken, updateNavAndCart, escapeHtml } from './main.js';
 
-// --- IMPORTANT: REPLACE WITH YOUR ACTUAL STRIPE TEST PUBLISHABLE KEY ---
-const STRIPE_PUBLISHABLE_KEY_FRONTEND = 'pk_test_51RUNHMCvLwGHDfvAOq3lAcVaxiac204BP7ubkHdq01shCMRam0O2GH9fdoRN6lsc1sDQcFUKsmrDOpO1Yt7GRSGS00cJNYdWmD';
+// --- IMPORTANT: REPLACE WITH YOUR ACTUAL STRIPE TEST PUBLISHABLE KEY IN YOUR LOCAL ENV ---
+// For production, this key should ideally come from a backend endpoint or config injection, not hardcoded.
+const STRIPE_PUBLISHABLE_KEY_FRONTEND = 'pk_test_51RUNHMCvLwGHDfvAOq3lAcVaxiac204BP7ubkHdq01shCMRam0O2GH9fdoRN6lsc1sDQcFUKsmrDOpO1Yt7GRSGS00cJNYdWmD'; // REPLACE THIS
 // --- ---
 
 // @ts-ignore - Stripe will be loaded from CDN
 const stripe = Stripe(STRIPE_PUBLISHABLE_KEY_FRONTEND);
 
 const orderSummaryItemsDiv = document.getElementById('order-summary-items');
+const summarySubtotalSpan = document.getElementById('summary-subtotal');
+const summaryShippingSpan = document.getElementById('summary-shipping');
+const summaryTaxSpan = document.getElementById('summary-tax');
 const summaryTotalPriceSpan = document.getElementById('summary-total-price');
-const confirmOrderPayBtn = document.getElementById('confirm-order-pay-btn') as HTMLButtonElement | null;
-const checkoutMessageEl = document.getElementById('checkout-message');
 
+const confirmOrderPayBtn = document.getElementById('confirm-order-pay-btn') as HTMLButtonElement | null;
+const checkoutMessageEl = document.getElementById('checkout-message') as HTMLParagraphElement | null;
+
+// Shipping Address Form Inputs
+const shippingNameInput = document.getElementById('shipping-name') as HTMLInputElement | null;
 const addressInput = document.getElementById('address') as HTMLInputElement | null;
 const cityInput = document.getElementById('city') as HTMLInputElement | null;
 const postalCodeInput = document.getElementById('postalCode') as HTMLInputElement | null;
 const countryInput = document.getElementById('country') as HTMLInputElement | null;
-// const paymentMethodSelect = document.getElementById('paymentMethod') as HTMLSelectElement | null; // Not directly used if only Stripe
 
 async function fetchCartSummaryForCheckout() {
     console.log('[Checkout.ts] fetchCartSummaryForCheckout called');
-    if (!orderSummaryItemsDiv || !summaryTotalPriceSpan) {
-        console.error('[Checkout.ts] Missing summary DOM elements.');
+    if (!orderSummaryItemsDiv || !summaryTotalPriceSpan || !summarySubtotalSpan || !summaryShippingSpan || !summaryTaxSpan) {
+        console.error('[Checkout.ts] Missing summary DOM elements for checkout page.');
         return;
     }
 
     const token = getToken();
-    if (!token) {
-        // Redirect handled by DOMContentLoaded check
+    if (!token) { // Should be caught by DOMContentLoaded listener redirect, but good check
         return;
     }
 
-    orderSummaryItemsDiv.innerHTML = '<p>Loading cart summary...</p>';
+    orderSummaryItemsDiv.innerHTML = '<p class="text-xs text-gray-500">Loading summary items...</p>';
+    summarySubtotalSpan.textContent = '...';
+    summaryShippingSpan.textContent = '...';
+    summaryTaxSpan.textContent = '...';
+    summaryTotalPriceSpan.textContent = '...';
+
 
     try {
         const response = await fetch(`${API_BASE_URL}/cart`, {
@@ -42,10 +52,10 @@ async function fetchCartSummaryForCheckout() {
 
         if (!response.ok) {
             if (response.status === 401) {
-                removeToken(); // Token might be invalid
+                removeToken();
                 alert('Your session has expired. Please log in again.');
                 window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
-                return; // Stop further execution
+                return;
             }
             const errorData = await response.json().catch(() => ({ message: `Failed to fetch cart summary. Status: ${response.status}` }));
             throw new Error(errorData.message);
@@ -55,35 +65,57 @@ async function fetchCartSummaryForCheckout() {
         console.log('[Checkout.ts] Cart summary data:', cartData);
 
         if (!cartData || !cartData.items || cartData.items.length === 0) {
-            orderSummaryItemsDiv.innerHTML = '<p>Your cart is empty. <a href="/">Continue shopping</a>.</p>';
-            summaryTotalPriceSpan.textContent = '0.00';
+            orderSummaryItemsDiv.innerHTML = '<p class="text-sm text-gray-600">Your cart is empty. Cannot proceed to checkout.</p>';
+            summarySubtotalSpan.textContent = '$0.00';
+            summaryShippingSpan.textContent = '$0.00';
+            summaryTaxSpan.textContent = '$0.00';
+            summaryTotalPriceSpan.textContent = '$0.00';
             if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
+            if (confirmOrderPayBtn) confirmOrderPayBtn.classList.add('opacity-50', 'cursor-not-allowed');
             return;
         }
 
         orderSummaryItemsDiv.innerHTML = `
-            <h4>Order Items:</h4>
-            <ul>
-                ${cartData.items.map((item: any) => `<li>${item.name || item.product?.name} (x${item.quantity}) - $${(item.price * item.quantity).toFixed(2)}</li>`).join('')}
+            <ul class="space-y-2">
+                ${cartData.items.map((item: any) => `
+                    <li class="flex justify-between text-sm">
+                        <span class="text-gray-600 w-3/4 truncate" title="${escapeHtml(item.name || item.product?.name)}">
+                            ${escapeHtml(item.name || item.product?.name)} (x${item.quantity})
+                        </span>
+                        <span class="text-gray-800 font-medium">$${(item.price * item.quantity).toFixed(2)}</span>
+                    </li>`).join('')}
             </ul>`;
-        summaryTotalPriceSpan.textContent = cartData.totalPrice?.toFixed(2) || '0.00';
-        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = false;
+        
+        // Use calculated prices from cart if available (these are typically calculated on backend)
+        summarySubtotalSpan.textContent = `$${parseFloat(cartData.itemsPrice || 0).toFixed(2)}`;
+        summaryShippingSpan.textContent = `$${parseFloat(cartData.shippingPrice || 0).toFixed(2)}`; // Assuming cart calculates/stores this
+        summaryTaxSpan.textContent = `$${parseFloat(cartData.taxPrice || 0).toFixed(2)}`;       // Assuming cart calculates/stores this
+        summaryTotalPriceSpan.textContent = `$${parseFloat(cartData.totalPrice || 0).toFixed(2)}`;
+        
+        if (confirmOrderPayBtn) {
+            confirmOrderPayBtn.disabled = false;
+            confirmOrderPayBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
 
     } catch (error: any) {
         console.error('[Checkout.ts] Error fetching cart summary:', error);
-        orderSummaryItemsDiv.innerHTML = `<p>Error loading summary: ${error.message}</p>`;
-        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
+        orderSummaryItemsDiv.innerHTML = `<p class="text-sm text-red-600">Error loading summary: ${error.message}</p>`;
+        if (confirmOrderPayBtn) {
+            confirmOrderPayBtn.disabled = true;
+            confirmOrderPayBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
     }
 }
 
 async function handleConfirmOrderAndPay() {
     console.log('[Checkout.ts] handleConfirmOrderAndPay function initiated.');
 
-    if (!checkoutMessageEl || !addressInput || !cityInput || !postalCodeInput || !countryInput) { // Removed paymentMethodSelect from check
+    if (!checkoutMessageEl || !shippingNameInput || !addressInput || !cityInput || !postalCodeInput || !countryInput) {
         console.error('[Checkout.ts] Critical checkout form DOM elements are missing.');
         if(checkoutMessageEl) {
             checkoutMessageEl.style.color = 'red';
             checkoutMessageEl.textContent = 'Page error: Form elements missing. Please refresh.';
+            checkoutMessageEl.classList.remove('hidden');
         }
         return;
     }
@@ -96,30 +128,35 @@ async function handleConfirmOrderAndPay() {
     }
 
     const shippingAddress = {
+        // name: shippingNameInput.value.trim(), // Add name if your backend Order schema expects it
         address: addressInput.value.trim(),
         city: cityInput.value.trim(),
         postalCode: postalCodeInput.value.trim(),
         country: countryInput.value.trim(),
     };
-    // const paymentMethod = paymentMethodSelect.value; // We'll default to Stripe
-    const paymentMethod = "Stripe"; // Hardcode for now as we are integrating Stripe
+    const paymentMethod = "Stripe";
 
-    if (!shippingAddress.address || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country) {
-        checkoutMessageEl.style.color = 'red';
-        checkoutMessageEl.textContent = 'Please fill in all shipping address fields.';
+    if (!shippingAddress.address || !shippingAddress.city || !shippingAddress.postalCode || !shippingAddress.country /*|| !shippingAddress.name*/) {
+        if(checkoutMessageEl) {
+            checkoutMessageEl.style.color = 'red';
+            checkoutMessageEl.textContent = 'Please fill in all shipping address fields.';
+            checkoutMessageEl.classList.remove('hidden');
+        }
         return;
     }
 
-    checkoutMessageEl.style.color = 'blue';
-    checkoutMessageEl.textContent = 'Processing order... Please wait.';
+    if(checkoutMessageEl) {
+        checkoutMessageEl.style.color = 'blue'; // Use Tailwind classes ideally: text-blue-600
+        checkoutMessageEl.textContent = 'Processing order... Please wait.';
+        checkoutMessageEl.classList.remove('hidden');
+    }
     if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = true;
+    if (confirmOrderPayBtn) confirmOrderPayBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
 
     let createdOrderData: any = null;
 
     try {
-        // Step 1: Create the order in your system with "Awaiting Payment" status
-        // The backend /orders route was updated in Day 14 to NOT expect orderItems in payload if using cart
-        // It will fetch the cart itself using the user's token.
         console.log('[Checkout.ts] Sending POST /api/v1/orders to create order document...');
         const orderResponse = await fetch(`${API_BASE_URL}/orders`, {
             method: 'POST',
@@ -127,10 +164,7 @@ async function handleConfirmOrderAndPay() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({
-                shippingAddress,
-                paymentMethod // This will be "Stripe"
-            })
+            body: JSON.stringify({ shippingAddress, paymentMethod })
         });
         const orderResult = await orderResponse.json();
         console.log('[Checkout.ts] Create order API response status:', orderResponse.status);
@@ -140,104 +174,95 @@ async function handleConfirmOrderAndPay() {
             const errorDetail = orderResult.message || (orderResult.errors ? JSON.stringify(orderResult.errors) : `Failed to create order (Status: ${orderResponse.status})`);
             throw new Error(errorDetail);
         }
-        createdOrderData = orderResult.data; // This should contain { orderId: '...', totalPrice: ..., status: '...' }
+        createdOrderData = orderResult.data;
 
         if (!createdOrderData || !createdOrderData.orderId) {
-            console.error('[Checkout.ts] Order data from backend is invalid or missing orderId after creation!', createdOrderData);
             throw new Error('Internal error: Failed to process valid order creation response.');
         }
 
-        checkoutMessageEl.textContent = `Order #${createdOrderData.orderId} created. Redirecting to Stripe for payment...`;
+        if(checkoutMessageEl) checkoutMessageEl.textContent = `Order #${createdOrderData.orderId.slice(-6)} created. Redirecting to Stripe...`;
 
-        // Step 2: Create Stripe Checkout Session
         console.log(`[Checkout.ts] Creating Stripe session for order ID: ${createdOrderData.orderId}`);
         const stripeSessionResponse = await fetch(`${API_BASE_URL}/payments/create-checkout-session`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ orderId: createdOrderData.orderId }) // Send the orderId created by your backend
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ orderId: createdOrderData.orderId })
         });
-
         const stripeSessionResult = await stripeSessionResponse.json();
         console.log('[Checkout.ts] Stripe session API response:', stripeSessionResult);
 
         if (!stripeSessionResponse.ok || !stripeSessionResult.sessionId) {
             throw new Error(stripeSessionResult.message || 'Failed to create Stripe payment session.');
         }
-
         const { sessionId } = stripeSessionResult;
 
-        // Step 3: Redirect to Stripe Checkout
         console.log(`[Checkout.ts] Redirecting to Stripe Checkout with session ID: ${sessionId}`);
+        // @ts-ignore - Stripe is global
         const { error: stripeError } = await stripe.redirectToCheckout({ sessionId });
 
         if (stripeError) {
             console.error('[Checkout.ts] Stripe redirectToCheckout error:', stripeError);
-            checkoutMessageEl.style.color = 'red';
-            checkoutMessageEl.textContent = `Payment Error: ${stripeError.message}`;
+            if(checkoutMessageEl) {
+                checkoutMessageEl.style.color = 'red';
+                checkoutMessageEl.textContent = `Payment Error: ${stripeError.message}`;
+                checkoutMessageEl.classList.remove('hidden');
+            }
             alert(`Payment Error: ${stripeError.message}`);
-            if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = false; // Re-enable button on Stripe client-side error
         }
-        // If redirectToCheckout is successful, the user is navigated away.
-        // If it fails, the error is handled above.
-
     } catch (error: any) {
         console.error('[Checkout.ts] Checkout process error:', error);
-        checkoutMessageEl.style.color = 'red';
-        checkoutMessageEl.textContent = `Error: ${error.message}`;
-        if (confirmOrderPayBtn) confirmOrderPayBtn.disabled = false;
+        if(checkoutMessageEl) {
+            checkoutMessageEl.style.color = 'red';
+            checkoutMessageEl.textContent = `Error: ${error.message}`;
+            checkoutMessageEl.classList.remove('hidden');
+        }
+    } finally {
+        if (confirmOrderPayBtn) {
+            confirmOrderPayBtn.disabled = false;
+            confirmOrderPayBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[Checkout.ts] DOMContentLoaded: Script is running.');
-
-    updateNavAndCart(); // Call this to update nav and cart count
+    updateNavAndCart();
     const token = getToken();
     if (!token) {
         console.log('[Checkout.ts] No token on DOMContentLoaded, redirecting to login.');
         alert('Please login to proceed to checkout.');
         window.location.href = `/login.html?redirect=${encodeURIComponent(window.location.pathname)}`;
-        return; // Stop further execution if not logged in
+        return;
     }
-    fetchCartSummaryForCheckout();
+    fetchCartSummaryForCheckout(); // Fetch and display cart summary for checkout page
 
-    console.log('[Checkout.ts] DOMContentLoaded: Confirm Order Button Element (confirmOrderPayBtn global):', confirmOrderPayBtn);
     if (confirmOrderPayBtn) {
-        console.log('[Checkout.ts] DOMContentLoaded: Attaching click listener to confirm-order-pay-btn');
         confirmOrderPayBtn.addEventListener('click', handleConfirmOrderAndPay);
     } else {
-        console.error('[Checkout.ts] DOMContentLoaded: ERROR - Confirm Order & Pay button (confirm-order-pay-btn) NOT FOUND in DOM!');
+        console.error('[Checkout.ts] DOMContentLoaded: ERROR - Confirm Order & Pay button (confirm-order-pay-btn) NOT FOUND!');
     }
 
-    // Handle redirection from Stripe
     const queryParams = new URLSearchParams(window.location.search);
-    const stripeSessionId = queryParams.get('session_id'); // From Stripe success_url
-    const cancelledStripeOrderId = queryParams.get('order_id'); // From Stripe cancel_url (if you passed it)
+    const stripeSessionIdParam = queryParams.get('session_id');
+    const cancelledOrderIdParam = queryParams.get('order_id');
 
-    if (stripeSessionId) {
+    if (stripeSessionIdParam) {
         if (checkoutMessageEl) {
-            checkoutMessageEl.style.color = 'green';
-            checkoutMessageEl.textContent = 'Payment successful! Thank you for your order. We are processing it. You will be redirected shortly.';
-            console.log("[Checkout.ts] Stripe Checkout Session ID (Success):", stripeSessionId);
+            checkoutMessageEl.style.color = 'green'; // text-green-600
+            checkoutMessageEl.textContent = 'Payment successful! Redirecting to confirmation...';
+            checkoutMessageEl.classList.remove('hidden');
         }
-        updateNavAndCart(); // Update cart (should be empty after webhook processes)
-        
-        // Redirect to a dedicated success page or homepage after a delay
+        // Redirect to the actual success page, Stripe might not always do this if success_url has issues.
+        // The success page will show the session_id from its own URL params.
+        // Webhook will handle order update.
         setTimeout(() => {
-            // Ideally, fetch the order status here before redirecting to be sure.
-            // For now, redirecting to a generic success page or home.
-            window.location.href = `/order-success.html?session_id=${stripeSessionId}`; // Or just '/'
-        }, 4000);
-
-    } else if (cancelledStripeOrderId) {
+            window.location.href = `/order-success.html?session_id=${stripeSessionIdParam}`;
+        }, 2000);
+    } else if (cancelledOrderIdParam) {
         if (checkoutMessageEl) {
-            checkoutMessageEl.style.color = 'orange';
-            checkoutMessageEl.textContent = `Your payment was cancelled for order ${cancelledStripeOrderId}. Your order is still pending payment.`;
-            console.log("[Checkout.ts] Payment Cancelled for Order ID:", cancelledStripeOrderId);
+            checkoutMessageEl.style.color = 'orange'; // text-yellow-600
+            checkoutMessageEl.textContent = `Your payment was cancelled. Your order #${cancelledOrderIdParam.slice(-6)} is pending.`;
+            checkoutMessageEl.classList.remove('hidden');
         }
-        // No need to disable button here, user might want to try again or go back to cart
     }
 });
