@@ -191,8 +191,20 @@ function getTokenPayload() {
 }
 function updateNavUI(token) {
     const authLinksContainers = [
-        { id: 'auth-links', loggedInHTML: `<a href="#" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Profile</a> <a href="#" id="logout-link" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>`, loggedOutHTML: `<a href="/login.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a> <a href="/register.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>`, logoutButtonId: 'logout-link', defaultRedirect: '/login.html' },
-        { id: 'auth-links-admin', loggedInHTML: `<a href="#" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Admin</a> <a href="#" id="admin-logout-link" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>`, loggedOutHTML: `<a href="/login.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a> <a href="/register.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>`, logoutButtonId: 'admin-logout-link', defaultRedirect: '/login.html?redirect=/admin/products.html' }
+        {
+            id: 'auth-links',
+            loggedInHTML: `<a href="#" id="logout-link" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>`,
+            loggedOutHTML: `<a href="/login.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a> <a href="/register.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>`,
+            logoutButtonId: 'logout-link',
+            defaultRedirect: '/login.html'
+        },
+        {
+            id: 'auth-links-admin',
+            loggedInHTML: `<a href="#" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Admin</a> <a href="#" id="admin-logout-link" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Logout</a>`,
+            loggedOutHTML: `<a href="/login.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Login</a> <a href="/register.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Register</a>`,
+            logoutButtonId: 'admin-logout-link',
+            defaultRedirect: '/login.html?redirect=/admin/products.html'
+        }
     ];
     authLinksContainers.forEach(navConfig => {
         const container = document.getElementById(navConfig.id);
