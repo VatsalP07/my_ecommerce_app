@@ -1,6 +1,11 @@
 # My E-Commerce App
 
-A full-stack e-commerce web application built with Node.js, TypeScript, Express, MongoDB, and a modern frontend using HTML, CSS (Tailwind), and TypeScript.
+A full-stack e-commerce web application built with Node.js, TypeScript, Express, MongoDB, and a modern frontend.
+
+## Live Demo
+
+Visit: [https://vatsal.justanotherdevel.com/](https://vatsal.justanotherdevel.com/)  
+Hosted on AWS EC2.
 
 ## Features
 
@@ -15,24 +20,7 @@ A full-stack e-commerce web application built with Node.js, TypeScript, Express,
 
 ```
 ├── src/                # Backend (Express, TypeScript)
-│   ├── app.ts
-│   ├── config/
-│   ├── controllers/
-│   ├── middleware/
-│   ├── models/
-│   ├── routes/
-│   └── types/
 ├── frontend/           # Frontend (HTML, CSS, JS/TS)
-│   ├── index.html
-│   ├── cart.html
-│   ├── checkout.html
-│   ├── category.html
-│   ├── login.html
-│   ├── register.html
-│   ├── admin/
-│   ├── css/
-│   ├── js/
-│   └── ts/
 ├── package.json
 ├── tsconfig.json
 ├── DockerFile
@@ -47,7 +35,8 @@ A full-stack e-commerce web application built with Node.js, TypeScript, Express,
 - Node.js 20.x
 - npm
 - MongoDB
-- Docker (optional, for containerization)
+- Docker (optional)
+- AWS credentials (for S3 uploads)
 
 ### Local Development
 
@@ -57,7 +46,7 @@ A full-stack e-commerce web application built with Node.js, TypeScript, Express,
     ```
 
 2. **Configure environment variables:**
-    - Copy `.env.example` to `.env` and fill in your values (MongoDB URI, Stripe keys, AWS S3, etc.).
+    - Copy `.env.example` to `.env` and fill in your values.
 
 3. **Build the project:**
     ```sh
@@ -71,9 +60,11 @@ A full-stack e-commerce web application built with Node.js, TypeScript, Express,
     ```
 
 5. **Access the app:**
-    - Open [http://localhost:5001](http://localhost:5001) in your browser.
+    - Open [http://localhost:5001](http://localhost:5001)
 
-### Docker
+### Docker Usage
+
+Your `DockerFile` uses multi-stage builds for efficient production images.
 
 1. **Build the Docker image:**
     ```sh
@@ -85,11 +76,10 @@ A full-stack e-commerce web application built with Node.js, TypeScript, Express,
     docker run -p 5001:5001 --env-file .env my-ecommerce-app
     ```
 
-## Scripts
+## Deployment
 
-- `npm run build:backend` – Compile backend TypeScript
-- `npm run build:frontend` – Compile frontend TypeScript
-- `npm start` – Start the Express server
+- The app is deployed on an AWS EC2 instance.
+- For production, ensure your `.env` file contains correct credentials and URLs.
 
 ## License
 
@@ -99,5 +89,5 @@ MIT
 
 **Note:**  
 - Update `.env` with your credentials and keys.
-- For Stripe payments, ensure you use your test keys in development.
-- For AWS S3, configure credentials in `src/config/s3Client.ts`.
+- For Stripe payments, use test keys in development.
+- For AWS S3, configure credentials in
